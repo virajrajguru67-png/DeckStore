@@ -1,0 +1,593 @@
+import { useState, useEffect } from 'react';
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { shareService } from '@/services/shareService';
+import { fileService } from '@/services/fileService';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Share } from '@/services/shareService';
+import { File as FileIcon, Folder as FolderIcon, Share2, Eye, ChevronLeft, Home, Plus, Upload, Grid3x3, List } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { PreviewModal } from '@/components/preview/PreviewModal';
+import { File, Folder } from '@/types/file';
+import { toast } from 'sonner';
+import { useFiles } from '@/hooks/useFiles';
+import { FileUploadDropzone } from '@/components/file-operations/FileUploadDropzone';
+import { FileListView } from '@/components/file-explorer/FileListView';
+import { FileGridView } from '@/components/file-explorer/FileGridView';
+import { BreadcrumbNav } from '@/components/file-explorer/BreadcrumbNav';
+import { NewFolderDialog } from '@/components/file-operations/NewFolderDialog';
+import { supabase } from '@/integrations/supabase/client';
+
+type ViewMode = 'grid' | 'list';
+
+interface SharedItem extends Share {
+  resourceName?: string;
+  resource?: File | Folder;
+  sharedByName?: string; // Name of the person who shared
+  sharedByEmail?: string; // Email of the person who shared
+}
+
+export default function Shared() {
+  const queryClient = useQueryClient();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [sharedItems, setSharedItems] = useState<SharedItem[]>([]);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [currentFolderName, setCurrentFolderName] = useState<string | null>(null);
+  const [breadcrumbs, setBreadcrumbs] = useState<Array<{ id: string | null; name: string }>>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
+  
+  // Fetch files and folders for the current shared folder
+  // Use shorter refetch interval (3 seconds) for shared folders to see updates faster
+  const { files, folders, isLoading: isLoadingFolder, refresh } = useFiles(
+    currentFolderId,
+    currentFolderId ? { refetchInterval: 3000 } : undefined
+  );
+  
+  // Set up real-time subscriptions for files and folders when viewing a shared folder
+  useEffect(() => {
+    if (!currentFolderId) return;
+
+    console.log('Setting up real-time subscriptions for shared folder:', currentFolderId);
+
+    // Subscribe to file changes in this folder
+    const filesChannel = supabase
+      .channel(`shared-files-${currentFolderId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'files',
+          filter: `folder_id=eq.${currentFolderId}`,
+        },
+        (payload) => {
+          console.log('Real-time: File change detected in shared folder:', {
+            event: payload.eventType,
+            fileId: payload.new?.id || payload.old?.id,
+            fileName: payload.new?.name || payload.old?.name,
+            folderId: payload.new?.folder_id || payload.old?.folder_id,
+            ownerId: payload.new?.owner_id || payload.old?.owner_id,
+          });
+          
+          // Force immediate refetch with a small delay to ensure database is updated
+          setTimeout(() => {
+            console.log('Refetching files after real-time event...');
+            queryClient.invalidateQueries({ queryKey: ['files', currentFolderId] });
+            queryClient.invalidateQueries({ queryKey: ['folders', currentFolderId] });
+            refresh();
+          }, 500);
+        }
+      )
+      .subscribe();
+
+    // Subscribe to folder changes in this folder
+    const foldersChannel = supabase
+      .channel(`shared-folders-${currentFolderId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'folders',
+          filter: `parent_folder_id=eq.${currentFolderId}`,
+        },
+        (payload) => {
+          console.log('Real-time: Folder change detected in shared folder:', {
+            event: payload.eventType,
+            folderId: payload.new?.id || payload.old?.id,
+            folderName: payload.new?.name || payload.old?.name,
+            parentFolderId: payload.new?.parent_folder_id || payload.old?.parent_folder_id,
+            ownerId: payload.new?.owner_id || payload.old?.owner_id,
+          });
+          
+          // Force immediate refetch with a small delay to ensure database is updated
+          setTimeout(() => {
+            console.log('Refetching folders after real-time event...');
+            queryClient.invalidateQueries({ queryKey: ['folders', currentFolderId] });
+            queryClient.invalidateQueries({ queryKey: ['files', currentFolderId] });
+            refresh();
+          }, 500);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('Cleaning up real-time subscriptions for folder:', currentFolderId);
+      supabase.removeChannel(filesChannel);
+      supabase.removeChannel(foldersChannel);
+    };
+  }, [currentFolderId, queryClient, refresh]);
+
+  const { data: sharedWithMe = [], isLoading, refetch } = useQuery({
+    queryKey: ['shared-with-me'],
+    queryFn: () => shareService.getSharedWithMe(),
+    refetchInterval: 5000, // Refetch every 5 seconds to catch new shares
+    refetchOnWindowFocus: true, // Refetch when user returns to the tab
+  });
+
+  // Fetch resource details and sharer information for each share
+  useEffect(() => {
+    const fetchResourceDetails = async () => {
+      if (sharedWithMe.length === 0) {
+        setSharedItems([]);
+        return;
+      }
+
+      const items: SharedItem[] = [];
+      for (const share of sharedWithMe) {
+        try {
+          // Fetch resource details
+          // First, try to use resource_name from share (if fetched in getSharedWithMe)
+          let resourceName = (share as any).resource_name || 'Unknown';
+          let resource: File | Folder | undefined;
+
+          // If resource_name is not available, fetch it separately
+          if (resourceName === 'Unknown') {
+            if (share.resource_type === 'file') {
+              const { data: file, error } = await fileService.getFileById(share.resource_id);
+              if (file && !error) {
+                resourceName = file.name;
+                resource = file;
+              } else {
+                console.error('Error fetching file:', {
+                  resourceId: share.resource_id,
+                  error: error?.message || 'Unknown error',
+                  errorCode: (error as any)?.code,
+                  errorDetails: (error as any)?.details,
+                  errorHint: (error as any)?.hint,
+                });
+              }
+            } else {
+              console.log('Fetching folder:', {
+                folderId: share.resource_id,
+                shareId: share.id,
+              });
+              const { data: folder, error } = await fileService.getFolderById(share.resource_id);
+              if (folder && !error) {
+                console.log('Folder fetched successfully:', {
+                  folderId: folder.id,
+                  folderName: folder.name,
+                });
+                resourceName = folder.name;
+                resource = folder;
+              } else {
+                // If folder fetch fails, try using the RPC function to get the name
+                console.warn('Error fetching folder, trying RPC function:', {
+                  resourceId: share.resource_id,
+                  error: error?.message || 'Unknown error',
+                });
+                
+                // Try to get folder name via RPC function (bypasses RLS)
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                  try {
+                    const { data: folderName, error: rpcError } = await supabase.rpc(
+                      'get_shared_folder_name',
+                      {
+                        folder_id_param: share.resource_id,
+                        user_id_param: user.id,
+                      }
+                    );
+
+                    if (!rpcError && folderName) {
+                      console.log('Folder name fetched via RPC:', folderName);
+                      resourceName = folderName;
+                    } else {
+                      console.error('RPC function also failed:', rpcError);
+                      resourceName = 'Unknown Folder';
+                    }
+                  } catch (rpcErr) {
+                    console.error('Exception calling RPC function:', rpcErr);
+                    resourceName = 'Unknown Folder';
+                  }
+                } else {
+                  resourceName = 'Unknown Folder';
+                }
+              }
+            }
+          } else {
+            // Resource name was fetched in getSharedWithMe, but we still need the full resource object for preview
+            // Only fetch if we need the full resource (for files that will be previewed)
+            if (share.resource_type === 'file') {
+              const { data: file, error } = await fileService.getFileById(share.resource_id);
+              if (file && !error) {
+                resource = file;
+              }
+            } else {
+              // Try to fetch folder, but don't fail if it's blocked by RLS
+              const { data: folder, error } = await fileService.getFolderById(share.resource_id);
+              if (folder && !error) {
+                resource = folder;
+              } else {
+                // Folder fetch failed (likely RLS), but we have the name from getSharedWithMe
+                // Create a minimal folder object for navigation
+                console.warn('Could not fetch full folder object, using minimal object:', {
+                  folderId: share.resource_id,
+                  folderName: resourceName,
+                });
+                // We'll create a minimal folder object if needed for navigation
+                // The folder will still work for navigation even without full details
+              }
+            }
+          }
+
+          // Fetch sharer profile information
+          let sharedByName: string | undefined;
+          let sharedByEmail: string | undefined;
+          if (share.shared_by) {
+            const sharerProfile = await fileService.getUserProfile(share.shared_by);
+            if (sharerProfile) {
+              sharedByName = sharerProfile.full_name;
+              sharedByEmail = sharerProfile.email;
+            }
+          }
+
+          items.push({
+            ...share,
+            resourceName,
+            resource,
+            sharedByName,
+            sharedByEmail,
+          });
+        } catch (error) {
+          console.error('Error fetching resource or sharer info:', {
+            shareId: share.id,
+            resourceType: share.resource_type,
+            resourceId: share.resource_id,
+            error: error instanceof Error ? error.message : String(error),
+            errorStack: error instanceof Error ? error.stack : undefined,
+          });
+          items.push({
+            ...share,
+            resourceName: 'Unknown',
+          });
+        }
+      }
+      setSharedItems(items);
+    };
+
+    fetchResourceDetails();
+  }, [sharedWithMe]);
+
+  // Load breadcrumbs when folder changes
+  useEffect(() => {
+    const loadBreadcrumbs = async () => {
+      if (!currentFolderId) {
+        setBreadcrumbs([]);
+        return;
+      }
+
+      // For shared folders, we'll build breadcrumbs from the folder hierarchy
+      const path: Array<{ id: string | null; name: string }> = [];
+      let folderId: string | null = currentFolderId;
+
+      while (folderId) {
+        const { data: folder } = await fileService.getFolderById(folderId);
+        if (folder && folder.data) {
+          path.unshift({ id: folder.data.id, name: folder.data.name });
+          // Try to get parent folder if it exists
+          // Note: For shared folders, parent_folder_id might not be accessible
+          // So we'll just show the current folder for now
+          folderId = null; // Stop at current folder for shared items
+        } else {
+          break;
+        }
+      }
+
+      setBreadcrumbs(path);
+    };
+
+    loadBreadcrumbs();
+  }, [currentFolderId]);
+
+  const handleOpen = async (item: SharedItem) => {
+    if (item.resource_type === 'file') {
+      // If we already have the resource, use it
+      if (item.resource) {
+        console.log('Opening shared file:', {
+          id: item.resource.id,
+          name: item.resource.name,
+          storage_key: item.resource.storage_key,
+          mime_type: item.resource.mime_type,
+        });
+        setSelectedFile(item.resource as File);
+        setPreviewOpen(true);
+      } else {
+        // Otherwise, fetch it again
+        console.log('Fetching file details for preview:', item.resource_id);
+        const { data: file, error } = await fileService.getFileById(item.resource_id);
+        if (file && !error) {
+          console.log('File fetched successfully:', {
+            id: file.id,
+            name: file.name,
+            storage_key: file.storage_key,
+            mime_type: file.mime_type,
+          });
+          setSelectedFile(file);
+          setPreviewOpen(true);
+        } else {
+          console.error('Failed to fetch file:', error);
+          toast.error('Failed to load file. You may not have permission to view this file.');
+        }
+      }
+    } else if (item.resource_type === 'folder') {
+      // Open folder within Shared page
+      setCurrentFolderId(item.resource_id);
+      setCurrentFolderName(item.resourceName || 'Folder');
+    }
+  };
+
+  const handleFolderClick = (folder: Folder) => {
+    setCurrentFolderId(folder.id);
+    setCurrentFolderName(folder.name);
+  };
+
+  const handleBack = () => {
+    if (breadcrumbs.length > 0) {
+      // For shared folders, we'll just go back to the root shared items
+      setCurrentFolderId(null);
+      setCurrentFolderName(null);
+    } else {
+      setCurrentFolderId(null);
+      setCurrentFolderName(null);
+    }
+  };
+
+  const handleFileClick = (file: File) => {
+    setSelectedFile(file);
+    setPreviewOpen(true);
+  };
+
+  const handleCreateFolder = async (name: string) => {
+    if (!currentFolderId) {
+      toast.error('Please open a shared folder first');
+      return;
+    }
+    const folder = await fileService.createFolder(name, currentFolderId);
+    if (folder) {
+      toast.success('Folder created');
+      refresh();
+    } else {
+      toast.error('Failed to create folder');
+    }
+  };
+
+  const handleUploadClick = () => {
+    if (!currentFolderId) {
+      toast.error('Please open a shared folder first');
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.onchange = async (e) => {
+      const files = Array.from((e.target as HTMLInputElement).files || []);
+      if (files.length > 0) {
+        const { uploadService } = await import('@/services/uploadService');
+        for (const file of files) {
+          await uploadService.uploadFile(file, { folderId: currentFolderId });
+        }
+        refresh();
+        queryClient.invalidateQueries({ queryKey: ['files', currentFolderId] });
+      }
+    };
+    input.click();
+  };
+
+  const handleFileAction = (action: string, item: File | Folder, type: 'file' | 'folder') => {
+    // Handle file/folder actions (share, rename, move, delete, etc.)
+    // For now, we'll just show a toast
+    toast.info(`${action} ${type}: ${item.name}`);
+  };
+
+  return (
+    <DashboardLayout title="Shared" subtitle="Files and folders shared with you" fullHeight>
+      <div className="flex flex-col h-full bg-background">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-background">
+          <div className="flex items-center gap-2">
+            {currentFolderId && (
+              <Button variant="ghost" size="icon" onClick={handleBack}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            )}
+            <div className="flex items-center gap-2">
+              {currentFolderId && (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => setNewFolderDialogOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    New Folder
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleUploadClick}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {currentFolderId && (
+              <>
+                <Button
+                  variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                  size="icon"
+                  onClick={() => setViewMode('grid')}
+                >
+                  <Grid3x3 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant={viewMode === 'list' ? 'default' : 'ghost'}
+                  size="icon"
+                  onClick={() => setViewMode('list')}
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Breadcrumb Navigation */}
+        {currentFolderId && (
+          <BreadcrumbNav
+            items={breadcrumbs.length > 0 ? breadcrumbs : [{ id: currentFolderId, name: currentFolderName || 'Folder' }]}
+            onNavigate={(folderId) => {
+              if (folderId === null) {
+                setCurrentFolderId(null);
+                setCurrentFolderName(null);
+              } else {
+                setCurrentFolderId(folderId);
+                // Find folder name from breadcrumbs or fetch it
+                const crumb = breadcrumbs.find(b => b.id === folderId);
+                if (crumb) {
+                  setCurrentFolderName(crumb.name);
+                }
+              }
+            }}
+          />
+        )}
+
+        {/* File Upload Dropzone (hidden, only for drag & drop) */}
+        <div className="flex-1 overflow-auto relative">
+          {currentFolderId && (
+            <FileUploadDropzone
+              folderId={currentFolderId}
+              onUploadComplete={refresh}
+            />
+          )}
+
+          {/* Show folder contents if a folder is open */}
+          {currentFolderId ? (
+            isLoadingFolder ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                  <p className="text-sm text-muted-foreground">Loading...</p>
+                </div>
+              </div>
+            ) : folders.length === 0 && files.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-center">
+                <FolderIcon className="h-16 w-16 text-muted-foreground mb-4" />
+                <p className="text-lg font-medium text-muted-foreground">No files or folders</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Upload files or create a folder to get started
+                </p>
+              </div>
+            ) : viewMode === 'grid' ? (
+              <FileGridView
+                folders={folders}
+                files={files}
+                onFolderClick={handleFolderClick}
+                onFileClick={handleFileClick}
+                onFileAction={handleFileAction}
+              />
+            ) : (
+              <FileListView
+                folders={folders}
+                files={files}
+                onFolderClick={handleFolderClick}
+                onFileClick={handleFileClick}
+                onFileAction={handleFileAction}
+              />
+            )
+          ) : (
+            /* Show shared items list */
+            isLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                  <p className="text-sm text-muted-foreground">Loading...</p>
+                </div>
+              </div>
+            ) : sharedItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-center">
+                <Share2 className="h-16 w-16 text-muted-foreground mb-4" />
+                <p className="text-lg font-medium text-muted-foreground">No shared files or folders</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Files and folders shared with you will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 p-4">
+                {sharedItems.map((item: SharedItem) => (
+                  <Card key={item.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleOpen(item)}>
+                    <CardContent className="p-6">
+                      {item.resource_type === 'folder' ? (
+                        <FolderIcon className="h-12 w-12 text-primary mb-2" />
+                      ) : (
+                        <FileIcon className="h-12 w-12 text-muted-foreground mb-2" />
+                      )}
+                      <p className="font-medium truncate mb-2" title={item.resourceName}>
+                        {item.resourceName || (item.resource_type === 'folder' ? 'Folder' : 'File')}
+                      </p>
+                      {item.sharedByName && (
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Shared by: <span className="font-medium">{item.sharedByName}</span>
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Access: <span className="capitalize">{item.access_level}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpen(item);
+                        }}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        Open
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )
+          )}
+        </div>
+
+        <NewFolderDialog
+          open={newFolderDialogOpen}
+          onOpenChange={setNewFolderDialogOpen}
+          onCreate={handleCreateFolder}
+        />
+
+        <PreviewModal
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          file={selectedFile}
+        />
+      </div>
+    </DashboardLayout>
+  );
+}
+
