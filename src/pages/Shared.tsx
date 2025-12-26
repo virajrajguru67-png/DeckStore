@@ -6,7 +6,7 @@ import { shareService } from '@/services/shareService';
 import { fileService } from '@/services/fileService';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Share } from '@/services/shareService';
-import { File as FileIcon, Folder as FolderIcon, Share2, Eye, ChevronLeft, Home, Plus, Upload, Grid3x3, List } from 'lucide-react';
+import { File as FileIcon, Folder as FolderIcon, Share2, Eye, ChevronLeft, Home, Plus, Upload, Grid3x3, List, MoreVertical, Star, Pencil, FolderOpen, Trash2, Lock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { PreviewModal } from '@/components/preview/PreviewModal';
 import { File, Folder } from '@/types/file';
@@ -17,7 +17,19 @@ import { FileListView } from '@/components/file-explorer/FileListView';
 import { FileGridView } from '@/components/file-explorer/FileGridView';
 import { BreadcrumbNav } from '@/components/file-explorer/BreadcrumbNav';
 import { NewFolderDialog } from '@/components/file-operations/NewFolderDialog';
+import { RenameDialog } from '@/components/file-operations/RenameDialog';
+import { MoveFileDialog } from '@/components/file-operations/MoveFileDialog';
+import { DeleteConfirmationDialog } from '@/components/ui/DeleteConfirmationDialog';
 import { supabase } from '@/integrations/supabase/client';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 
 type ViewMode = 'grid' | 'list';
 
@@ -38,6 +50,11 @@ export default function Shared() {
   const [breadcrumbs, setBreadcrumbs] = useState<Array<{ id: string | null; name: string }>>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<{ id: string; name: string; type: 'file' | 'folder' } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Fetch files and folders for the current shared folder
   // Use shorter refetch interval (3 seconds) for shared folders to see updates faster
@@ -397,10 +414,107 @@ export default function Shared() {
     input.click();
   };
 
-  const handleFileAction = (action: string, item: File | Folder, type: 'file' | 'folder') => {
-    // Handle file/folder actions (share, rename, move, delete, etc.)
-    // For now, we'll just show a toast
-    toast.info(`${action} ${type}: ${item.name}`);
+  const handleFileAction = async (action: string, item: File | Folder, type: 'file' | 'folder') => {
+    setSelectedItem({ id: item.id, name: item.name, type });
+    
+    switch (action) {
+      case 'rename':
+        setRenameDialogOpen(true);
+        break;
+      case 'move':
+        setMoveDialogOpen(true);
+        break;
+      case 'hide':
+        const success = type === 'file'
+          ? await fileService.toggleHiddenFile(item.id, true)
+          : await fileService.toggleHiddenFolder(item.id, true);
+        if (success) {
+          queryClient.invalidateQueries({ queryKey: ['shared-with-me'] });
+          queryClient.invalidateQueries({ queryKey: ['hidden-files'] });
+          queryClient.invalidateQueries({ queryKey: ['hidden-folders'] });
+          if (currentFolderId) {
+            refresh();
+          }
+        }
+        break;
+      case 'delete':
+        setDeleteDialogOpen(true);
+        break;
+      default:
+        toast.info(`${action} ${type}: ${item.name}`);
+    }
+  };
+
+  const handleToggleFavorite = async (item: SharedItem) => {
+    if (!item.resource) {
+      // Fetch the resource if not already loaded
+      if (item.resource_type === 'file') {
+        const { data: file } = await fileService.getFileById(item.resource_id);
+        if (file) {
+          item.resource = file;
+        } else {
+          toast.error('Could not load file details');
+          return;
+        }
+      } else {
+        const { data: folder } = await fileService.getFolderById(item.resource_id);
+        if (folder) {
+          item.resource = folder;
+        } else {
+          toast.error('Could not load folder details');
+          return;
+        }
+      }
+    }
+
+    const isFavorite = item.resource_type === 'file'
+      ? (item.resource as File).metadata?.is_favorite === true
+      : (item.resource as any).metadata?.is_favorite === true;
+
+    const success = item.resource_type === 'file'
+      ? await fileService.toggleFavoriteFile(item.resource_id, !isFavorite)
+      : await fileService.toggleFavoriteFolder(item.resource_id, !isFavorite);
+
+    if (success) {
+      // Refresh the shared items list
+      queryClient.invalidateQueries({ queryKey: ['shared-with-me'] });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedItem) return;
+    
+    setIsDeleting(true);
+    try {
+      const success = selectedItem.type === 'file'
+        ? await fileService.deleteFile(selectedItem.id)
+        : await fileService.deleteFolder(selectedItem.id);
+      
+      if (success) {
+        toast.success(`${selectedItem.type === 'file' ? 'File' : 'Folder'} deleted`);
+        // Refresh shared items
+        queryClient.invalidateQueries({ queryKey: ['shared-with-me'] });
+        if (currentFolderId) {
+          refresh();
+        }
+      } else {
+        toast.error(`Failed to delete ${selectedItem.type}`);
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('An error occurred while deleting');
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+      setSelectedItem(null);
+    }
+  };
+
+  const isFavorite = (item: SharedItem): boolean => {
+    if (!item.resource) return false;
+    return item.resource_type === 'file'
+      ? (item.resource as File).metadata?.is_favorite === true
+      : (item.resource as any).metadata?.is_favorite === true;
   };
 
   return (
@@ -430,24 +544,20 @@ export default function Shared() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {currentFolderId && (
-              <>
-                <Button
-                  variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                  size="icon"
-                  onClick={() => setViewMode('grid')}
-                >
-                  <Grid3x3 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={viewMode === 'list' ? 'default' : 'ghost'}
-                  size="icon"
-                  onClick={() => setViewMode('list')}
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-              </>
-            )}
+            <Button
+              variant={viewMode === 'grid' ? 'default' : 'ghost'}
+              size="icon"
+              onClick={() => setViewMode('grid')}
+            >
+              <Grid3x3 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="icon"
+              onClick={() => setViewMode('list')}
+            >
+              <List className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
@@ -504,6 +614,7 @@ export default function Shared() {
                 onFolderClick={handleFolderClick}
                 onFileClick={handleFileClick}
                 onFileAction={handleFileAction}
+                onSelectionChange={() => {}}
               />
             ) : (
               <FileListView
@@ -512,6 +623,7 @@ export default function Shared() {
                 onFolderClick={handleFolderClick}
                 onFileClick={handleFileClick}
                 onFileAction={handleFileAction}
+                onSelectionChange={() => {}}
               />
             )
           ) : (
@@ -531,7 +643,7 @@ export default function Shared() {
                   Files and folders shared with you will appear here
                 </p>
               </div>
-            ) : (
+            ) : viewMode === 'grid' ? (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 p-4">
                 {sharedItems.map((item: SharedItem) => (
                   <Card key={item.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleOpen(item)}>
@@ -571,6 +683,103 @@ export default function Shared() {
                   </Card>
                 ))}
               </div>
+            ) : (
+              <div className="overflow-auto">
+                <Table>
+                  <TableHeader className="sticky top-0 z-10 bg-background border-b border-border">
+                    <TableRow className="hover:bg-transparent border-b-0">
+                      <TableHead className="h-10 px-4 font-semibold text-xs text-muted-foreground">Name</TableHead>
+                      <TableHead className="h-10 px-4 font-semibold text-xs text-muted-foreground">Shared By</TableHead>
+                      <TableHead className="h-10 px-4 font-semibold text-xs text-muted-foreground">Access Level</TableHead>
+                      <TableHead className="h-10 px-4 font-semibold text-xs text-muted-foreground">Shared At</TableHead>
+                      <TableHead className="h-10 px-4 w-[40px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sharedItems.map((item: SharedItem) => (
+                      <TableRow
+                        key={item.id}
+                        className="cursor-pointer hover:bg-accent/40 border-b border-border/50 transition-colors duration-100 group"
+                        onClick={() => handleOpen(item)}
+                      >
+                        <TableCell className="px-4 py-2.5">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {item.resource_type === 'folder' ? (
+                              <FolderIcon className="h-4 w-4 text-primary shrink-0" />
+                            ) : (
+                              <FileIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                            )}
+                            <span className="text-sm font-medium truncate" title={item.resourceName}>
+                              {item.resourceName || (item.resource_type === 'folder' ? 'Folder' : 'File')}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-2.5 text-muted-foreground">
+                          <span className="text-xs">
+                            {item.sharedByName || item.sharedByEmail || 'Unknown'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-4 py-2.5 text-muted-foreground">
+                          <span className="text-xs capitalize">{item.access_level}</span>
+                        </TableCell>
+                        <TableCell className="px-4 py-2.5 text-muted-foreground">
+                          <span className="text-xs">
+                            {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7"
+                              >
+                                <MoreVertical className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              <DropdownMenuItem onClick={() => handleOpen(item)}>
+                                <Eye className="mr-2 h-4 w-4" />
+                                Open
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleToggleFavorite(item)}>
+                                <Star className={cn("mr-2 h-4 w-4", isFavorite(item) && "fill-yellow-400 text-yellow-400")} />
+                                {isFavorite(item) ? 'Remove from Favorites' : 'Mark as Favorite'}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              {item.resource && (
+                                <>
+                                  <DropdownMenuItem onClick={() => handleFileAction('rename', item.resource!, item.resource_type)}>
+                                    <Pencil className="mr-2 h-4 w-4" />
+                                    Rename
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleFileAction('move', item.resource!, item.resource_type)}>
+                                    <FolderOpen className="mr-2 h-4 w-4" />
+                                    Move
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleFileAction('hide', item.resource!, item.resource_type)}>
+                                    <Lock className="mr-2 h-4 w-4" />
+                                    Move to Hidden
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem 
+                                    className="text-destructive focus:text-destructive"
+                                    onClick={() => handleFileAction('delete', item.resource!, item.resource_type)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )
           )}
         </div>
@@ -579,6 +788,42 @@ export default function Shared() {
           open={newFolderDialogOpen}
           onOpenChange={setNewFolderDialogOpen}
           onCreate={handleCreateFolder}
+        />
+
+        <RenameDialog
+          open={renameDialogOpen}
+          onOpenChange={setRenameDialogOpen}
+          fileId={selectedItem?.type === 'file' ? selectedItem.id : undefined}
+          folderId={selectedItem?.type === 'folder' ? selectedItem.id : undefined}
+          currentName={selectedItem?.name || ''}
+          onRename={() => {
+            queryClient.invalidateQueries({ queryKey: ['shared-with-me'] });
+            if (currentFolderId) {
+              refresh();
+            }
+          }}
+        />
+
+        <MoveFileDialog
+          open={moveDialogOpen}
+          onOpenChange={setMoveDialogOpen}
+          fileId={selectedItem?.type === 'file' ? selectedItem.id : undefined}
+          folderId={selectedItem?.type === 'folder' ? selectedItem.id : undefined}
+          onMove={() => {
+            queryClient.invalidateQueries({ queryKey: ['shared-with-me'] });
+            if (currentFolderId) {
+              refresh();
+            }
+          }}
+        />
+
+        <DeleteConfirmationDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={handleDelete}
+          itemCount={1}
+          itemType={selectedItem?.type || 'item'}
+          isLoading={isDeleting}
         />
 
         <PreviewModal

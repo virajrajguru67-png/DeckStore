@@ -15,6 +15,7 @@ import Shared from "./pages/Shared";
 import SharedLink from "./pages/SharedLink";
 import Recent from "./pages/Recent";
 import Favorites from "./pages/Favorites";
+import Hidden from "./pages/Hidden";
 import RecycleBin from "./pages/RecycleBin";
 import SearchResults from "./pages/SearchResults";
 import Users from "./pages/admin/Users";
@@ -27,7 +28,7 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -77,6 +78,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Favorites />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/hidden"
+                element={
+                  <ProtectedRoute>
+                    <Hidden />
                   </ProtectedRoute>
                 }
               />

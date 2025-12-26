@@ -9,10 +9,11 @@ import { PreviewModal } from '@/components/preview/PreviewModal';
 import { FileGridView } from '@/components/file-explorer/FileGridView';
 import { FileListView } from '@/components/file-explorer/FileListView';
 import { BreadcrumbNav } from '@/components/file-explorer/BreadcrumbNav';
+import { DeleteConfirmationDialog } from '@/components/ui/DeleteConfirmationDialog';
 import { useFiles } from '@/hooks/useFiles';
 import { fileService } from '@/services/fileService';
 import { Button } from '@/components/ui/button';
-import { Folder, Plus, Upload, Grid3x3, List, ChevronLeft } from 'lucide-react';
+import { Folder, Plus, Upload, Grid3x3, List, ChevronLeft, Trash2 } from 'lucide-react';
 import { File as FileType, Folder as FolderType } from '@/types/file';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -38,6 +39,9 @@ export default function Files() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{ id: string; name: string; type: 'file' | 'folder' } | null>(null);
   const [selectedFile, setSelectedFile] = useState<FileType | null>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const skipUrlUpdate = useRef(false);
 
   // Initialize from URL on mount, then sync URL → state only when URL changes externally
@@ -151,7 +155,7 @@ export default function Files() {
     }
   };
 
-  const handleFileAction = (action: string, item: FileType | FolderType, type: 'file' | 'folder') => {
+  const handleFileAction = async (action: string, item: FileType | FolderType, type: 'file' | 'folder') => {
     setSelectedItem({ id: item.id, name: item.name, type });
     
     switch (action) {
@@ -167,6 +171,16 @@ export default function Files() {
       case 'copy':
         if (type === 'file') {
           handleCopy(item.id);
+        }
+        break;
+      case 'hide':
+        const success = type === 'file'
+          ? await fileService.toggleHiddenFile(item.id, true)
+          : await fileService.toggleHiddenFolder(item.id, true);
+        if (success) {
+          refresh();
+          queryClient.invalidateQueries({ queryKey: ['hidden-files'] });
+          queryClient.invalidateQueries({ queryKey: ['hidden-folders'] });
         }
         break;
       case 'delete':
@@ -193,43 +207,129 @@ export default function Files() {
     input.click();
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedItemIds.size === 0) return;
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    if (selectedItemIds.size === 0) return;
+    
+    setIsDeleting(true);
+    try {
+      const selectedItems = [
+        ...folders.filter(f => selectedItemIds.has(f.id)).map(f => ({ ...f, type: 'folder' as const })),
+        ...files.filter(f => selectedItemIds.has(f.id)).map(f => ({ ...f, type: 'file' as const }))
+      ];
+      
+      let successCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+
+      for (const item of selectedItems) {
+        try {
+          const success = item.type === 'file'
+            ? await fileService.deleteFile(item.id)
+            : await fileService.deleteFolder(item.id);
+          
+          if (success) {
+            successCount++;
+          } else {
+            errorCount++;
+            errors.push(`Failed to delete ${item.name || item.id}`);
+          }
+        } catch (error) {
+          errorCount++;
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          errors.push(`Failed to delete ${item.name || item.id}: ${errorMessage}`);
+          console.error(`Error deleting ${item.type} ${item.id}:`, error);
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`Deleted ${successCount} item(s)${errorCount > 0 ? ` (${errorCount} failed)` : ''}`);
+        setSelectedItemIds(new Set());
+        // Refresh current files and also update Recycle Bin
+        refresh();
+        queryClient.invalidateQueries({ queryKey: ['deleted-files'] });
+        queryClient.invalidateQueries({ queryKey: ['deleted-folders'] });
+        queryClient.refetchQueries({ queryKey: ['deleted-files'] });
+        queryClient.refetchQueries({ queryKey: ['deleted-folders'] });
+      } else if (errorCount > 0) {
+        toast.error(`Failed to delete ${errorCount} item(s). ${errors.slice(0, 3).join(', ')}${errors.length > 3 ? '...' : ''}`);
+      }
+    } catch (error) {
+      console.error('Bulk delete error:', error);
+      toast.error(error instanceof Error ? error.message : 'An error occurred while deleting items');
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+    }
+  };
+
   return (
     <DashboardLayout title="Files" subtitle="Manage your files and folders" fullHeight>
       <div className="flex flex-col h-full bg-background">
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-3 border-b bg-background">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background">
+          <div className="flex items-center gap-1.5">
             {currentFolderId && (
-              <Button variant="ghost" size="icon" onClick={handleBack}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleBack}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
             )}
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setNewFolderDialogOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
+          </div>
+          <div className="flex items-center gap-1.5">
+            {selectedItemIds.size > 0 && (
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                className="h-8 text-xs" 
+                onClick={handleBulkDelete}
+                disabled={isDeleting}
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                Delete {selectedItemIds.size}
+              </Button>
+            )}
+            <div className="flex items-center gap-1.5">
+              <Button 
+                variant="default" 
+                size="sm" 
+                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" 
+                onClick={() => setNewFolderDialogOpen(true)}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
                 New Folder
               </Button>
-              <Button variant="outline" size="sm" onClick={handleUploadClick}>
-                <Upload className="mr-2 h-4 w-4" />
+              <Button 
+                variant="default" 
+                size="sm" 
+                className="h-8 text-xs bg-primary hover:bg-primary/90 text-white" 
+                onClick={handleUploadClick}
+              >
+                <Upload className="mr-1.5 h-3.5 w-3.5" />
                 Upload
               </Button>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant={viewMode === 'grid' ? 'default' : 'ghost'}
-              size="icon"
-              onClick={() => setViewMode('grid')}
-            >
-              <Grid3x3 className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'ghost'}
-              size="icon"
-              onClick={() => setViewMode('list')}
-            >
-              <List className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-0.5 ml-2">
+              <Button
+                variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setViewMode('grid')}
+              >
+                <Grid3x3 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setViewMode('list')}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -240,51 +340,62 @@ export default function Files() {
         />
 
         {/* File Upload Dropzone (hidden, only for drag & drop) */}
-        <div className="flex-1 overflow-auto relative">
+        <div className="flex-1 overflow-hidden relative">
           <FileUploadDropzone
             folderId={currentFolderId}
             onUploadComplete={refresh}
           />
 
           {isLoading ? (
-            <div className="flex items-center justify-center h-64">
+            <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                <p className="text-sm text-muted-foreground">Loading...</p>
+                <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent mx-auto mb-3"></div>
+                <p className="text-xs text-muted-foreground">Loading...</p>
               </div>
             </div>
           ) : folders.length === 0 && files.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-center">
-              <Folder className="h-16 w-16 text-muted-foreground mb-4" />
-              <p className="text-lg font-medium text-muted-foreground">No files or folders</p>
-              <p className="text-sm text-muted-foreground mt-2">
+            <div className="flex flex-col items-center justify-center h-full text-center px-4">
+              <Folder className="h-12 w-12 text-muted-foreground/50 mb-3" />
+              <p className="text-sm font-medium text-foreground mb-1">No files or folders</p>
+              <p className="text-xs text-muted-foreground">
                 Upload files or create a folder to get started
               </p>
             </div>
-          ) : viewMode === 'grid' ? (
-            <FileGridView
-              folders={folders}
-              files={files}
-              onFolderClick={handleFolderClick}
-              onFileClick={(file) => {
-                setSelectedFile(file);
-                setPreviewOpen(true);
-              }}
-              onFileAction={handleFileAction}
-            />
-          ) : (
-            <FileListView
-              folders={folders}
-              files={files}
-              onFolderClick={handleFolderClick}
-              onFileClick={(file) => {
-                setSelectedFile(file);
-                setPreviewOpen(true);
-              }}
-              onFileAction={handleFileAction}
-            />
-          )}
+              ) : viewMode === 'grid' ? (
+                <FileGridView
+                  folders={folders}
+                  files={files}
+                  onFolderClick={handleFolderClick}
+                  onFileClick={(file) => {
+                    setSelectedFile(file);
+                    setPreviewOpen(true);
+                  }}
+                  onFileAction={handleFileAction}
+                  onSelectionChange={setSelectedItemIds}
+                />
+              ) : (
+                <FileListView
+                  folders={folders}
+                  files={files}
+                  onFolderClick={handleFolderClick}
+                  onFileClick={(file) => {
+                    setSelectedFile(file);
+                    setPreviewOpen(true);
+                  }}
+                  onFileAction={handleFileAction}
+                  onSelectionChange={setSelectedItemIds}
+                />
+              )}
         </div>
+
+        <DeleteConfirmationDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={confirmBulkDelete}
+          itemCount={selectedItemIds.size}
+          itemType="item"
+          isLoading={isDeleting}
+        />
 
         <NewFolderDialog
           open={newFolderDialogOpen}

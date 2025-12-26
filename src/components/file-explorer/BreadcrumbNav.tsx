@@ -14,24 +14,24 @@ interface BreadcrumbNavProps {
 
 export function BreadcrumbNav({ items, onNavigate }: BreadcrumbNavProps) {
   return (
-    <nav className="flex items-center gap-1 px-4 py-2 bg-muted/30 border-b">
+    <nav className="flex items-center gap-1 px-4 py-1.5 border-b border-border bg-background">
       <Button
         variant="ghost"
         size="sm"
-        className="h-8 px-2"
+        className="h-7 px-2 text-xs"
         onClick={() => onNavigate(null)}
       >
-        <Home className="h-4 w-4" />
+        <Home className="h-3.5 w-3.5" />
       </Button>
       {items.map((item, index) => (
         <div key={item.id || 'root'} className="flex items-center gap-1">
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
           <Button
             variant="ghost"
             size="sm"
             className={cn(
-              "h-8 px-2 text-sm",
-              index === items.length - 1 && "font-semibold"
+              "h-7 px-2 text-xs",
+              index === items.length - 1 && "font-semibold text-foreground"
             )}
             onClick={() => onNavigate(item.id)}
             disabled={index === items.length - 1}

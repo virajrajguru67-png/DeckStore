@@ -47,33 +47,33 @@ export function Header({ title, subtitle }: HeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-sidebar-border/60 bg-sidebar-accent/40 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 items-center justify-between px-8">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary shrink-0">
+    <header className="sticky top-0 z-40 border-b border-border bg-background">
+      <div className="flex h-14 items-center justify-between px-4 gap-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="flex items-center justify-center w-6 h-6 text-muted-foreground shrink-0">
             {getPageIcon()}
           </div>
-          <div className="space-y-0.5">
-            <h1 className="text-base font-semibold tracking-tight text-sidebar-foreground flex items-center gap-2">
+          <div className="min-w-0">
+            <h1 className="text-sm font-semibold text-foreground truncate">
               {title}
             </h1>
             {subtitle && (
-              <p className="text-xs text-sidebar-foreground/70 max-w-md truncate">
+              <p className="text-xs text-muted-foreground truncate">
                 {subtitle}
               </p>
             )}
           </div>
         </div>
 
-        <div className="flex-1 max-w-md mx-4">
+        <div className="flex-1 max-w-md">
           <SearchBar />
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 shrink-0">
           {!isOnline && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <WifiOff className="h-4 w-4" />
-              <span>Offline</span>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-2">
+              <WifiOff className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Offline</span>
             </div>
           )}
 
@@ -82,18 +82,18 @@ export function Header({ title, subtitle }: HeaderProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-full hover:bg-accent/60 transition-colors border border-border/60"
+                className="h-8 w-8 hover:bg-accent transition-colors duration-100"
               >
                 {mounted ? (
                   theme === 'dark' ? (
-                    <Sun className="h-4 w-4 text-muted-foreground" />
+                    <Sun className="h-4 w-4" />
                   ) : theme === 'light' ? (
-                    <Moon className="h-4 w-4 text-muted-foreground" />
+                    <Moon className="h-4 w-4" />
                   ) : (
-                    <Monitor className="h-4 w-4 text-muted-foreground" />
+                    <Monitor className="h-4 w-4" />
                   )
                 ) : (
-                  <Monitor className="h-4 w-4 text-muted-foreground" />
+                  <Monitor className="h-4 w-4" />
                 )}
               </Button>
             </DropdownMenuTrigger>
@@ -118,9 +118,9 @@ export function Header({ title, subtitle }: HeaderProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="relative h-8 w-8 rounded-full hover:bg-accent/60 transition-colors border border-border/60"
+                className="relative h-8 w-8 hover:bg-accent transition-colors duration-100"
               >
-                <Bell className="h-4 w-4 text-muted-foreground" />
+                <Bell className="h-4 w-4" />
                 {unreadCount > 0 && (
                   <Badge
                     variant="destructive"
@@ -131,9 +131,9 @@ export function Header({ title, subtitle }: HeaderProps) {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80 rounded-xl border-border/50 shadow-lg">
-              <div className="p-3 border-b border-border/50 bg-muted/30">
-                <h3 className="font-semibold text-sm text-foreground">Notifications</h3>
+            <DropdownMenuContent align="end" className="w-80">
+              <div className="px-3 py-2 border-b border-border">
+                <h3 className="font-semibold text-sm">Notifications</h3>
               </div>
               <div className="max-h-96 overflow-y-auto">
                 {notifications.length === 0 ? (
@@ -145,7 +145,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                   notifications.slice(0, 10).map((notification) => (
                     <DropdownMenuItem
                       key={notification.id}
-                      className="flex flex-col items-start p-3 cursor-pointer hover:bg-accent/50 transition-colors"
+                      className="flex flex-col items-start p-3 cursor-pointer hover:bg-accent transition-colors duration-100"
                       onClick={() => markAsRead(notification.id)}
                     >
                       <div className="flex items-start gap-3 w-full">
@@ -153,7 +153,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                           <div className="h-2 w-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate text-foreground">{notification.title}</p>
+                          <p className="text-sm font-medium truncate">{notification.title}</p>
                           <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{notification.message}</p>
                         </div>
                       </div>
@@ -166,11 +166,11 @@ export function Header({ title, subtitle }: HeaderProps) {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center gap-2">
-                <Avatar className="h-8 w-8">
+              <Button variant="ghost" className="flex items-center gap-2 h-8 px-2">
+                <Avatar className="h-6 w-6">
                   <AvatarImage src={profile?.avatar_url || undefined} />
-                  <AvatarFallback>
-                    {profile?.full_name?.charAt(0).toUpperCase() || <User className="h-4 w-4" />}
+                  <AvatarFallback className="text-xs">
+                    {profile?.full_name?.charAt(0).toUpperCase() || <User className="h-3 w-3" />}
                   </AvatarFallback>
                 </Avatar>
                 <span className="hidden md:block text-sm">{profile?.full_name || 'User'}</span>

@@ -1,14 +1,26 @@
 import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
+import { DeleteConfirmationDialog } from '@/components/ui/DeleteConfirmationDialog';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fileService } from '@/services/fileService';
 import { File, Folder } from '@/types/file';
-import { Folder as FolderIcon, File as FileIcon, Trash2, RotateCcw, Grid3x3, List } from 'lucide-react';
+import { Trash2, RotateCcw, Grid3x3, List, MoreVertical } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { FolderIcon } from '@/components/ui/FolderIcon';
+import { getFileIconComponent, getFileIconComponentLarge, formatFileSize } from '@/lib/fileUtils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +32,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { formatFileSize } from '@/lib/fileUtils';
 import { toast } from 'sonner';
 
 type ViewMode = 'grid' | 'list';
@@ -30,6 +41,9 @@ export default function RecycleBin() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; type: 'file' | 'folder' } | null>(null);
   const [confirmText, setConfirmText] = useState('');
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { data: deletedFiles = [], isLoading: filesLoading } = useQuery({
     queryKey: ['deleted-files'],
@@ -41,16 +55,25 @@ export default function RecycleBin() {
     queryFn: () => fileService.getDeletedFolders(),
   });
 
-  const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['deleted-files'] });
-    queryClient.invalidateQueries({ queryKey: ['deleted-folders'] });
+  const refresh = async () => {
+    // Invalidate and immediately refetch to get updated data
+    await queryClient.invalidateQueries({ queryKey: ['deleted-files'] });
+    await queryClient.invalidateQueries({ queryKey: ['deleted-folders'] });
+    await queryClient.refetchQueries({ queryKey: ['deleted-files'] });
+    await queryClient.refetchQueries({ queryKey: ['deleted-folders'] });
   };
 
   const handleRestoreFile = async (fileId: string) => {
     const success = await fileService.restoreFile(fileId);
     if (success) {
       toast.success('File restored');
-      refresh();
+      // Remove from selected items if it was selected
+      setSelectedItemIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(fileId);
+        return newSet;
+      });
+      await refresh();
     }
   };
 
@@ -58,7 +81,13 @@ export default function RecycleBin() {
     const success = await fileService.restoreFolder(folderId);
     if (success) {
       toast.success('Folder restored');
-      refresh();
+      // Remove from selected items if it was selected
+      setSelectedItemIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(folderId);
+        return newSet;
+      });
+      await refresh();
     }
   };
 
@@ -77,9 +106,18 @@ export default function RecycleBin() {
       
     if (success) {
       toast.success(`${itemToDelete.type === 'file' ? 'File' : 'Folder'} permanently deleted`);
+      // Remove from selected items if it was selected
+      setSelectedItemIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(itemToDelete.id);
+        return newSet;
+      });
       setItemToDelete(null);
       setConfirmText('');
-      refresh();
+      // Force immediate refresh
+      await refresh();
+    } else {
+      toast.error(`Failed to permanently delete ${itemToDelete.type === 'file' ? 'file' : 'folder'}`);
     }
   };
 
@@ -100,32 +138,157 @@ export default function RecycleBin() {
     return dateB - dateA; // Newest first
   });
 
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedItemIds(new Set(allItems.map(item => item.id)));
+    } else {
+      setSelectedItemIds(new Set());
+    }
+  };
+
+  const handleSelectItem = (itemId: string, checked: boolean) => {
+    setSelectedItemIds(prev => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(itemId);
+      } else {
+        newSet.delete(itemId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedItemIds.size === 0) return;
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    if (selectedItemIds.size === 0) return;
+    
+    setIsDeleting(true);
+    try {
+      const selectedItems = allItems.filter(item => selectedItemIds.has(item.id));
+      
+      let successCount = 0;
+      let errorCount = 0;
+      const errors: string[] = [];
+
+      for (const item of selectedItems) {
+        try {
+          const success = item.type === 'file'
+            ? await fileService.permanentlyDeleteFile(item.id)
+            : await fileService.permanentlyDeleteFolder(item.id);
+          
+          if (success) {
+            successCount++;
+          } else {
+            errorCount++;
+            errors.push(`Failed to permanently delete ${item.name || item.id}`);
+          }
+        } catch (error) {
+          errorCount++;
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          errors.push(`Failed to permanently delete ${item.name || item.id}: ${errorMessage}`);
+          console.error(`Error permanently deleting ${item.type} ${item.id}:`, error);
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`Permanently deleted ${successCount} item(s)${errorCount > 0 ? ` (${errorCount} failed)` : ''}`);
+        setSelectedItemIds(new Set());
+        await refresh();
+      } else if (errorCount > 0) {
+        toast.error(`Failed to permanently delete ${errorCount} item(s). ${errors.slice(0, 3).join(', ')}${errors.length > 3 ? '...' : ''}`);
+      }
+    } catch (error) {
+      console.error('Bulk permanent delete error:', error);
+      toast.error(error instanceof Error ? error.message : 'An error occurred while permanently deleting items');
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+    }
+  };
+
+  const handleBulkRestore = async () => {
+    if (selectedItemIds.size === 0) return;
+    
+    const selectedItems = allItems.filter(item => selectedItemIds.has(item.id));
+    let successCount = 0;
+    let errorCount = 0;
+    const errors: string[] = [];
+
+    for (const item of selectedItems) {
+      try {
+        const success = item.type === 'file'
+          ? await fileService.restoreFile(item.id)
+          : await fileService.restoreFolder(item.id);
+        
+        if (success) {
+          successCount++;
+        } else {
+          errorCount++;
+          errors.push(`Failed to restore ${item.name || item.id}`);
+        }
+      } catch (error) {
+        errorCount++;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        errors.push(`Failed to restore ${item.name || item.id}: ${errorMessage}`);
+        console.error(`Error restoring ${item.type} ${item.id}:`, error);
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(`Restored ${successCount} item(s)${errorCount > 0 ? ` (${errorCount} failed)` : ''}`);
+      setSelectedItemIds(new Set());
+      await refresh();
+    } else if (errorCount > 0) {
+      toast.error(`Failed to restore ${errorCount} item(s). ${errors.slice(0, 3).join(', ')}${errors.length > 3 ? '...' : ''}`);
+    }
+  };
+
+  const isAllSelected = allItems.length > 0 && selectedItemIds.size === allItems.length;
+  const isIndeterminate = selectedItemIds.size > 0 && selectedItemIds.size < allItems.length;
+
   return (
     <DashboardLayout title="Recycle Bin" subtitle="Restore or permanently delete files">
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Recycle Bin</h1>
-            <p className="text-muted-foreground">
-              Files and folders deleted in the last 30 days
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant={viewMode === 'grid' ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setViewMode('grid')}
-            >
-              <Grid3x3 className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setViewMode('list')}
-            >
-              <List className="h-4 w-4" />
-            </Button>
-          </div>
+        <div className="flex items-center justify-end gap-2">
+          {selectedItemIds.size > 0 && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBulkRestore}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Restore {selectedItemIds.size}
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleBulkDelete}
+                disabled={isDeleting}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete {selectedItemIds.size}
+              </Button>
+            </>
+          )}
+          <Button
+            variant={viewMode === 'grid' ? 'default' : 'outline'}
+            size="icon"
+            onClick={() => setViewMode('grid')}
+          >
+            <Grid3x3 className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={viewMode === 'list' ? 'default' : 'outline'}
+            size="icon"
+            onClick={() => setViewMode('list')}
+          >
+            <List className="h-4 w-4" />
+          </Button>
         </div>
 
         {isLoading ? (
@@ -144,21 +307,44 @@ export default function RecycleBin() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[50px]">
+                    <Checkbox
+                      checked={isAllSelected}
+                      onCheckedChange={handleSelectAll}
+                      className={cn(
+                        isIndeterminate && "border-primary bg-primary/20"
+                      )}
+                    />
+                  </TableHead>
                   <TableHead className="w-[30%]">Name</TableHead>
                   <TableHead className="text-right">Size</TableHead>
                   <TableHead>Deleted At</TableHead>
-                  <TableHead className="w-[200px]">Actions</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {allItems.map((item) => (
-                  <TableRow key={item.id}>
+                  <TableRow 
+                    key={item.id}
+                    className={cn(
+                      "cursor-pointer hover:bg-accent/40 border-b border-border/50 transition-colors duration-100 group",
+                      selectedItemIds.has(item.id) && "bg-accent/60"
+                    )}
+                  >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedItemIds.has(item.id)}
+                        onCheckedChange={(checked) => handleSelectItem(item.id, checked as boolean)}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-3">
                         {item.type === 'folder' ? (
-                          <FolderIcon className="h-5 w-5 text-primary" />
+                          <FolderIcon size={20} className="text-primary shrink-0" />
                         ) : (
-                          <FileIcon className="h-5 w-5 text-muted-foreground" />
+                          <div className="shrink-0">
+                            {getFileIconComponent((item as File).mime_type, (item as File).name, 'sm')}
+                          </div>
                         )}
                         <span className="truncate">{item.name}</span>
                       </div>
@@ -169,29 +355,38 @@ export default function RecycleBin() {
                     <TableCell className="text-muted-foreground">
                       {item.deleted_at && format(new Date(item.deleted_at), 'MMM d, yyyy h:mm a')}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => 
-                            item.type === 'folder' 
-                              ? handleRestoreFolder(item.id)
-                              : handleRestoreFile(item.id)
-                          }
-                        >
-                          <RotateCcw className="h-4 w-4 mr-2" />
-                          Restore
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleDeleteClick(item as File | Folder, item.type)}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </Button>
-                      </div>
+                    <TableCell className="px-2" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity duration-100"
+                          >
+                            <MoreVertical className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem 
+                            onClick={() => 
+                              item.type === 'folder' 
+                                ? handleRestoreFolder(item.id)
+                                : handleRestoreFile(item.id)
+                            }
+                          >
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Restore
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => handleDeleteClick(item as File | Folder, item.type)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete Permanently
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -204,11 +399,13 @@ export default function RecycleBin() {
               <Card key={item.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex flex-col items-center text-center">
-                    {item.type === 'folder' ? (
-                      <FolderIcon className="h-12 w-12 text-primary mb-2" />
-                    ) : (
-                      <FileIcon className="h-12 w-12 text-muted-foreground mb-2" />
-                    )}
+                    <div className="mb-2 flex items-center justify-center">
+                      {item.type === 'folder' ? (
+                        <FolderIcon size={48} className="text-primary" />
+                      ) : (
+                        getFileIconComponentLarge((item as File).mime_type, (item as File).name)
+                      )}
+                    </div>
                     <p className="font-medium truncate w-full mb-1" title={item.name}>
                       {item.name}
                     </p>
@@ -220,29 +417,38 @@ export default function RecycleBin() {
                     <p className="text-xs text-muted-foreground mb-4">
                       {item.deleted_at && formatDistanceToNow(new Date(item.deleted_at), { addSuffix: true })}
                     </p>
-                    <div className="flex flex-col gap-2 w-full">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => 
-                          item.type === 'folder' 
-                            ? handleRestoreFolder(item.id)
-                            : handleRestoreFile(item.id)
-                        }
-                      >
-                        <RotateCcw className="h-4 w-4 mr-2" />
-                        Restore
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="w-full"
-                        onClick={() => handleDeleteClick(item as File | Folder, item.type)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
-                      </Button>
+                    <div className="relative w-full">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem 
+                            onClick={() => 
+                              item.type === 'folder' 
+                                ? handleRestoreFolder(item.id)
+                                : handleRestoreFile(item.id)
+                            }
+                          >
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Restore
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => handleDeleteClick(item as File | Folder, item.type)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete Permanently
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 </CardContent>
@@ -296,6 +502,16 @@ export default function RecycleBin() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <DeleteConfirmationDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          onConfirm={confirmBulkDelete}
+          itemCount={selectedItemIds.size}
+          itemType="item"
+          isPermanent={true}
+          isLoading={isDeleting}
+        />
       </div>
     </DashboardLayout>
   );

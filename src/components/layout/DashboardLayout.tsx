@@ -14,14 +14,14 @@ export function DashboardLayout({ children, title, subtitle, fullHeight = false 
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Header title={title || 'Deck Store'} subtitle={subtitle} />
+        <Header title={title || 'VaultNexus'} subtitle={subtitle} />
         {fullHeight ? (
           <main className="flex-1 overflow-hidden w-full">
             {children}
           </main>
         ) : (
-          <main className="flex-1 overflow-y-auto p-8 lg:p-10 w-full bg-gradient-to-br from-background via-background to-muted/20">
-            <div className="max-w-[1920px] mx-auto">
+          <main className="flex-1 overflow-y-auto w-full">
+            <div className="max-w-[1920px] mx-auto p-6">
               {children}
             </div>
           </main>

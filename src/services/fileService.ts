@@ -45,7 +45,12 @@ export const fileService = {
       })) || [],
     });
 
-    return (data as File[]) || [];
+    // Filter out hidden files
+    const visibleFiles = ((data as File[]) || []).filter(file => {
+      return !file.metadata?.is_hidden;
+    });
+
+    return visibleFiles;
   },
 
   async getFolders(parentFolderId: string | null = null): Promise<Folder[]> {
@@ -84,7 +89,12 @@ export const fileService = {
       folderNames: data?.map(f => f.name) || [],
     });
 
-    return (data as Folder[]) || [];
+    // Filter out hidden folders
+    const visibleFolders = ((data as Folder[]) || []).filter(folder => {
+      return !(folder as any).metadata?.is_hidden;
+    });
+
+    return visibleFolders;
   },
 
   async createFolder(name: string, parentFolderId: string | null = null): Promise<Folder | null> {
@@ -582,49 +592,128 @@ export const fileService = {
   },
 
   async permanentlyDeleteFile(fileId: string): Promise<boolean> {
-    // Get file to delete storage
-    const { data: file } = await supabase
-      .from('files')
-      .select('storage_key')
-      .eq('id', fileId)
-      .single();
+    try {
+      // First, try using a database function if it exists (bypasses RLS)
+      const { data: functionResult, error: functionError } = await supabase.rpc('permanently_delete_file', {
+        file_id_param: fileId
+      });
 
-    if (file && (file as any).storage_key) {
-      await supabase.storage.from('files').remove([(file as any).storage_key as string]);
-    }
+      if (!functionError && functionResult) {
+        // Function exists and succeeded
+        return true;
+      }
 
-    const { error } = await supabase
-      .from('files')
-      .delete()
-      .eq('id', fileId);
+      // Fallback to direct delete if function doesn't exist
+      // Get file to delete storage
+      const { data: file } = await supabase
+        .from('files')
+        .select('storage_key, owner_id')
+        .eq('id', fileId)
+        .single();
 
-    if (error) {
-      console.error('Error permanently deleting file:', error);
-      toast.error('Failed to permanently delete file');
+      if (!file) {
+        console.error('File not found:', fileId);
+        toast.error('File not found');
+        return false;
+      }
+
+      // Check ownership
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || (file as any).owner_id !== user.id) {
+        console.error('Permission denied: You do not own this file');
+        toast.error('Permission denied: You do not own this file');
+        return false;
+      }
+
+      // Delete from storage first
+      if ((file as any).storage_key) {
+        const { error: storageError } = await supabase.storage
+          .from('files')
+          .remove([(file as any).storage_key as string]);
+        
+        if (storageError) {
+          console.warn('Error deleting file from storage:', storageError);
+          // Continue with database delete even if storage delete fails
+        }
+      }
+
+      // Delete from database
+      const { error } = await supabase
+        .from('files')
+        .delete()
+        .eq('id', fileId)
+        .eq('owner_id', user.id); // Extra safety check
+
+      if (error) {
+        console.error('Error permanently deleting file:', error);
+        toast.error('Failed to permanently delete file: ' + (error.message || 'Unknown error'));
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error in permanentlyDeleteFile:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to permanently delete file');
       return false;
     }
-
-    return true;
   },
 
   async permanentlyDeleteFolder(folderId: string): Promise<boolean> {
-    // Note: This permanently deletes the folder record
-    // In a production system, you might want to also delete all files and subfolders
-    // For now, we'll just delete the folder record
-    // Files and subfolders will be orphaned (you may want to handle this differently)
-    
-    const { error } = await supabase
-      .from('folders')
-      .delete()
-      .eq('id', folderId);
+    try {
+      // First, try using a database function if it exists (bypasses RLS)
+      const { data: functionResult, error: functionError } = await supabase.rpc('permanently_delete_folder', {
+        folder_id_param: folderId
+      });
 
-    if (error) {
-      console.error('Error permanently deleting folder:', error);
-      toast.error('Failed to permanently delete folder');
+      if (!functionError && functionResult) {
+        // Function exists and succeeded
+        return true;
+      }
+
+      // Fallback to direct delete if function doesn't exist
+      // Get folder to check ownership
+      const { data: folder } = await supabase
+        .from('folders')
+        .select('owner_id')
+        .eq('id', folderId)
+        .single();
+
+      if (!folder) {
+        console.error('Folder not found:', folderId);
+        toast.error('Folder not found');
+        return false;
+      }
+
+      // Check ownership
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || (folder as any).owner_id !== user.id) {
+        console.error('Permission denied: You do not own this folder');
+        toast.error('Permission denied: You do not own this folder');
+        return false;
+      }
+
+      // Note: In a production system, you might want to also delete all files and subfolders
+      // For now, we'll just delete the folder record
+      // Files and subfolders will be orphaned (you may want to handle this differently)
+      
+      const { error } = await supabase
+        .from('folders')
+        .delete()
+        .eq('id', folderId)
+        .eq('owner_id', user.id); // Extra safety check
+
+      if (error) {
+        console.error('Error permanently deleting folder:', error);
+        toast.error('Failed to permanently delete folder: ' + (error.message || 'Unknown error'));
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error in permanentlyDeleteFolder:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to permanently delete folder');
       return false;
     }
-
-    return true;
   },
 
   async getFolderCounts(folderId: string): Promise<{ files: number; folders: number }> {
@@ -861,6 +950,129 @@ export const fileService = {
       return (data as Folder[]) || [];
     } catch (error) {
       console.error('Exception fetching favorite folders:', error);
+      return [];
+    }
+  },
+
+  async toggleHiddenFile(fileId: string, isHidden: boolean): Promise<boolean> {
+    try {
+      const { data: file } = await supabase
+        .from('files')
+        .select('metadata')
+        .eq('id', fileId)
+        .single();
+
+      if (!file) {
+        toast.error('File not found');
+        return false;
+      }
+
+      const metadata = file.metadata || {};
+      metadata.is_hidden = isHidden;
+
+      const { error } = await supabase
+        .from('files')
+        .update({ metadata })
+        .eq('id', fileId);
+
+      if (error) {
+        console.error('Error toggling hidden:', error);
+        toast.error('Failed to update hidden status');
+        return false;
+      }
+
+      toast.success(isHidden ? 'File moved to hidden' : 'File removed from hidden');
+      return true;
+    } catch (error) {
+      console.error('Exception toggling hidden:', error);
+      toast.error('Failed to update hidden status');
+      return false;
+    }
+  },
+
+  async toggleHiddenFolder(folderId: string, isHidden: boolean): Promise<boolean> {
+    try {
+      const { data: folder } = await supabase
+        .from('folders')
+        .select('*')
+        .eq('id', folderId)
+        .single();
+
+      if (!folder) {
+        toast.error('Folder not found');
+        return false;
+      }
+
+      const metadata = (folder as any).metadata || {};
+      metadata.is_hidden = isHidden;
+
+      const { error } = await supabase
+        .from('folders')
+        .update({ metadata: metadata as any })
+        .eq('id', folderId);
+
+      if (error) {
+        console.error('Error toggling hidden:', error);
+        toast.error('Failed to update hidden status');
+        return false;
+      }
+
+      toast.success(isHidden ? 'Folder moved to hidden' : 'Folder removed from hidden');
+      return true;
+    } catch (error) {
+      console.error('Exception toggling hidden:', error);
+      toast.error('Failed to update hidden status');
+      return false;
+    }
+  },
+
+  async getHiddenFiles(): Promise<File[]> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('files')
+        .select('*')
+        .is('deleted_at', null)
+        .eq('owner_id', user.id)
+        .contains('metadata', { is_hidden: true });
+
+      if (error) {
+        console.error('Error fetching hidden files:', error);
+        return [];
+      }
+
+      return (data as File[]) || [];
+    } catch (error) {
+      console.error('Exception fetching hidden files:', error);
+      return [];
+    }
+  },
+
+  async getHiddenFolders(): Promise<Folder[]> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('folders')
+        .select('*')
+        .is('deleted_at', null)
+        .eq('owner_id', user.id)
+        .contains('metadata', { is_hidden: true });
+
+      if (error) {
+        if (error.code === '42703') {
+          return [];
+        }
+        console.error('Error fetching hidden folders:', error);
+        return [];
+      }
+
+      return (data as Folder[]) || [];
+    } catch (error) {
+      console.error('Exception fetching hidden folders:', error);
       return [];
     }
   },
