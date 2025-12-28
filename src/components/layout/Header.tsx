@@ -47,10 +47,10 @@ export function Header({ title, subtitle }: HeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center justify-between px-4 gap-4">
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          <div className="flex items-center justify-center w-6 h-6 text-muted-foreground shrink-0">
+          <div className="flex items-center justify-center w-6 h-6 text-primary shrink-0">
             {getPageIcon()}
           </div>
           <div className="min-w-0">
@@ -65,53 +65,21 @@ export function Header({ title, subtitle }: HeaderProps) {
           </div>
         </div>
 
-        <div className="flex-1 max-w-md">
+        <div className="flex-1 max-w-md hidden md:block">
           <SearchBar />
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Mobile Search - just an icon maybe, or keep generic if responsive logic handles it. Keeping generic for now but ensuring alignment */}
+
+        <div className="flex items-center gap-2 shrink-0">
           {!isOnline && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-2">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground px-2 bg-muted/50 rounded-full py-0.5">
               <WifiOff className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Offline</span>
             </div>
           )}
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 hover:bg-accent transition-colors duration-100"
-              >
-                {mounted ? (
-                  theme === 'dark' ? (
-                    <Sun className="h-4 w-4" />
-                  ) : theme === 'light' ? (
-                    <Moon className="h-4 w-4" />
-                  ) : (
-                    <Monitor className="h-4 w-4" />
-                  )
-                ) : (
-                  <Monitor className="h-4 w-4" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40">
-              <DropdownMenuItem onClick={() => setTheme('light')} className="cursor-pointer">
-                <Sun className="mr-2 h-4 w-4" />
-                Light
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme('dark')} className="cursor-pointer">
-                <Moon className="mr-2 h-4 w-4" />
-                Dark
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme('system')} className="cursor-pointer">
-                <Monitor className="mr-2 h-4 w-4" />
-                System
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Theme toggle removed (moved to sidebar) */}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

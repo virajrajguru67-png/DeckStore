@@ -18,16 +18,24 @@ export const activityService = {
     resourceId?: string,
     metadata?: Record<string, any>
   ): Promise<void> {
-    const { data: { user } } = await supabase.auth.getUser();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
 
-    await supabase.from('activity_logs').insert({
-      user_id: user?.id || null,
-      action_type: actionType,
-      resource_type: resourceType,
-      resource_id: resourceId || null,
-      metadata: metadata || {},
-      ip_address: null, // Would need to get from request in server-side
-    });
+      const { error } = await (supabase.from('activity_logs') as any).insert({
+        user_id: user?.id || null,
+        action_type: actionType,
+        resource_type: resourceType,
+        resource_id: resourceId || null,
+        metadata: metadata || {},
+        ip_address: null,
+      });
+
+      if (error) {
+        console.error('Error logging activity:', error);
+      }
+    } catch (error) {
+      console.error('Exception logging activity:', error);
+    }
   },
 
   async getActivityLogs(
@@ -38,8 +46,8 @@ export const activityService = {
       limit?: number;
     }
   ): Promise<ActivityLog[]> {
-    let query = supabase
-      .from('activity_logs')
+    let query = (supabase
+      .from('activity_logs') as any)
       .select('*')
       .order('created_at', { ascending: false });
 

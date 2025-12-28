@@ -12,6 +12,7 @@
     "create-demo-accounts": "node scripts/create-demo-accounts.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
@@ -47,6 +48,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
+    "framer-motion": "^12.23.26",
     "idb": "^8.0.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
@@ -88,5 +90,3 @@
     "vite": "^5.4.19"
   }
 }
-
-

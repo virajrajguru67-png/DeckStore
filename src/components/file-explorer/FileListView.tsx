@@ -65,7 +65,7 @@ export function FileListView({ folders, files, onFolderClick, onFileClick, onFil
   useEffect(() => {
     const fetchUserProfiles = async () => {
       const userIds = new Set<string>();
-      
+
       // Collect all unique user IDs
       folders.forEach(f => userIds.add(f.owner_id));
       files.forEach(f => userIds.add(f.owner_id));
@@ -114,31 +114,42 @@ export function FileListView({ folders, files, onFolderClick, onFileClick, onFil
     return profile?.full_name || profile?.email || 'Unknown';
   };
 
-  const isFavorite = (item: FileType | FolderType): boolean => {
+  const isFavorite = (item: any): boolean => {
+    // Check top-level property first (used by Documents)
+    if (item.is_favorite === true) return true;
+
+    // Fallback to metadata for files/folders
     if (item.type === 'file') {
       return (item as FileType).metadata?.is_favorite === true;
     }
-    // For folders, check if metadata exists and has is_favorite
     return (item as any).metadata?.is_favorite === true;
   };
 
-  const handleToggleFavorite = async (e: React.MouseEvent, item: FileType | FolderType) => {
+  const handleToggleFavorite = async (e: React.MouseEvent, item: any) => {
     e.stopPropagation();
     const currentFavorite = isFavorite(item);
     let success = false;
-    
+
     if (item.type === 'file') {
       success = await fileService.toggleFavoriteFile(item.id, !currentFavorite);
-    } else {
+    } else if (item.type === 'folder') {
       success = await fileService.toggleFavoriteFolder(item.id, !currentFavorite);
+    } else if (item.type === 'document') {
+      // Import and use documentService if needed, but for now we'll trigger via action or prop
+      // For simplicity in this common component, we'll try to use the onFileAction if possible
+      // but the service call is fine if we import it.
+      const { documentService } = await import('@/services/documentService');
+      success = await documentService.toggleFavorite(item.id, !currentFavorite);
     }
 
     if (success) {
       // Invalidate queries to refresh the UI
       queryClient.invalidateQueries({ queryKey: ['files'] });
       queryClient.invalidateQueries({ queryKey: ['folders'] });
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
       queryClient.invalidateQueries({ queryKey: ['favorite-files'] });
       queryClient.invalidateQueries({ queryKey: ['favorite-folders'] });
+      queryClient.invalidateQueries({ queryKey: ['favorite-documents'] });
     }
   };
 
@@ -235,8 +246,8 @@ export function FileListView({ folders, files, onFolderClick, onFileClick, onFil
               </TableCell>
               {showItemsColumn && (
                 <TableCell className="px-4 py-2.5 text-center text-muted-foreground">
-                  {item.type === 'folder' && folderCounts[item.id] && 
-                   (folderCounts[item.id].folders > 0 || folderCounts[item.id].files > 0) ? (
+                  {item.type === 'folder' && folderCounts[item.id] &&
+                    (folderCounts[item.id].folders > 0 || folderCounts[item.id].files > 0) ? (
                     <span className="text-xs tabular-nums">
                       {folderCounts[item.id].folders} folders, {folderCounts[item.id].files} files
                     </span>
@@ -247,28 +258,28 @@ export function FileListView({ folders, files, onFolderClick, onFileClick, onFil
               )}
               <TableCell className="px-4 py-2.5 text-right text-muted-foreground">
                 <span className="text-xs tabular-nums">
-                {item.type === 'file' ? formatFileSize((item as FileType).size) : '-'}
+                  {item.type === 'file' ? formatFileSize((item as FileType).size) : '-'}
                 </span>
               </TableCell>
               <TableCell className="px-4 py-2.5 text-muted-foreground">
                 <span className="text-xs truncate max-w-[120px] block">
-                {getModifiedBy(item.owner_id)}
+                  {getModifiedBy(item.owner_id)}
                 </span>
               </TableCell>
               <TableCell className="px-4 py-2.5 text-muted-foreground">
                 <span className="text-xs tabular-nums">
-                {item.type === 'folder' 
+                  {item.type === 'folder'
                     ? format(new Date((item as FolderType).updated_at || (item as FolderType).created_at), 'MMM d, yyyy')
                     : format(new Date((item as FileType).updated_at || (item as FileType).created_at), 'MMM d, yyyy')
-                }
+                  }
                 </span>
               </TableCell>
               <TableCell className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity duration-100"
                     >
                       <MoreVertical className="h-3.5 w-3.5" />
@@ -286,11 +297,11 @@ export function FileListView({ folders, files, onFolderClick, onFileClick, onFil
                       {isFavorite(item) ? 'Remove from Favorites' : 'Mark as Favorite'}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onFileAction('share', item, item.type)}>
-                        <Share2 className="mr-2 h-4 w-4" />
+                      <Share2 className="mr-2 h-4 w-4" />
                       Share
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onFileAction('rename', item, item.type)}>
-                        <Pencil className="mr-2 h-4 w-4" />
+                      <Pencil className="mr-2 h-4 w-4" />
                       Rename
                     </DropdownMenuItem>
                     {item.type === 'file' && (
@@ -300,15 +311,15 @@ export function FileListView({ folders, files, onFolderClick, onFileClick, onFil
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem onClick={() => onFileAction('move', item, item.type)}>
-                        <FolderOpen className="mr-2 h-4 w-4" />
+                      <FolderOpen className="mr-2 h-4 w-4" />
                       Move
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onFileAction(isHiddenPage ? 'move-to-main' : 'hide', item, item.type)}>
-                        {isHiddenPage ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
+                      {isHiddenPage ? <Unlock className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4" />}
                       {isHiddenPage ? 'Move to Main' : 'Move to Hidden'}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
                       onClick={() => onFileAction('delete', item, item.type)}
                     >

@@ -37,8 +37,11 @@ export function getFileIconComponent(
 ): ReactNode {
   const extension = fileName ? getFileExtension(fileName) : '';
   const iconSize = size === 'sm' ? 'h-4 w-4' : size === 'lg' ? 'h-6 w-6' : 'h-5 w-5';
-  
+
   // Check by MIME type first
+  if (mimeType === 'application/vnd.deckstore.document') {
+    return <FileText className={`${iconSize} text-primary`} />;
+  }
   if (mimeType?.startsWith('image/')) {
     const iconSizeNum = size === 'sm' ? 16 : size === 'lg' ? 64 : 20;
     return <ImageFileIcon size={iconSizeNum} />;
@@ -53,7 +56,7 @@ export function getFileIconComponent(
     const iconSizeNum = size === 'sm' ? 16 : size === 'lg' ? 64 : 20;
     return <PdfFileIcon size={iconSizeNum} />;
   }
-  
+
   // Spreadsheets (Excel)
   if (
     mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
@@ -64,12 +67,12 @@ export function getFileIconComponent(
     const iconSizeNum = size === 'sm' ? 16 : size === 'lg' ? 64 : 20;
     return <ExcelFileIcon size={iconSizeNum} />;
   }
-  
+
   // OpenDocument Spreadsheet (ODS)
   if (extension === 'ods') {
     return <Table className={`${iconSize} text-green-600`} />;
   }
-  
+
   // Presentations (PowerPoint)
   if (
     mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
@@ -79,12 +82,12 @@ export function getFileIconComponent(
     const iconSizeNum = size === 'sm' ? 16 : size === 'lg' ? 64 : 20;
     return <PowerPointFileIcon size={iconSizeNum} />;
   }
-  
+
   // OpenDocument Presentation (ODP)
   if (mimeType === 'application/vnd.oasis.opendocument.presentation' || extension === 'odp') {
     return <Presentation className={`${iconSize} text-orange-500`} />;
   }
-  
+
   // Word documents
   if (
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
@@ -94,18 +97,18 @@ export function getFileIconComponent(
   ) {
     return <FileText className={`${iconSize} text-blue-600`} />;
   }
-  
+
   // SQL files
   if (extension === 'sql') {
     const iconSizeNum = size === 'sm' ? 16 : size === 'lg' ? 64 : 20;
     return <SqlFileIcon size={iconSizeNum} />;
   }
-  
+
   // JSON files
   if (mimeType === 'application/json' || extension === 'json') {
     return <FileCode className={`${iconSize} text-yellow-500`} />;
   }
-  
+
   // Text files
   if (
     extension === 'txt' || extension === 'log' || extension === 'readme'
@@ -113,7 +116,7 @@ export function getFileIconComponent(
     const iconSizeNum = size === 'sm' ? 16 : size === 'lg' ? 64 : 20;
     return <TextFileIcon size={iconSizeNum} />;
   }
-  
+
   // Markdown and other text-based files
   if (
     mimeType?.startsWith('text/') ||
@@ -121,7 +124,7 @@ export function getFileIconComponent(
   ) {
     return <FileText className={`${iconSize} text-gray-400`} />;
   }
-  
+
   // Code files
   if (
     extension === 'js' || extension === 'jsx' || extension === 'ts' || extension === 'tsx' ||
@@ -135,7 +138,7 @@ export function getFileIconComponent(
   ) {
     return <FileCode className={`${iconSize} text-yellow-600`} />;
   }
-  
+
   // Archives
   if (
     mimeType?.includes('zip') ||
@@ -147,7 +150,7 @@ export function getFileIconComponent(
   ) {
     return <Archive className={`${iconSize} text-amber-600`} />;
   }
-  
+
   // Default file icon
   return <FileIconType className={`${iconSize} text-muted-foreground`} />;
 }
@@ -157,7 +160,7 @@ export function getFileIconComponentLarge(
   fileName?: string
 ): ReactNode {
   const extension = fileName ? getFileExtension(fileName) : '';
-  
+
   // Check by MIME type first
   if (mimeType?.startsWith('image/')) {
     return <ImageFileIcon size={64} />;
@@ -171,7 +174,7 @@ export function getFileIconComponentLarge(
   if (mimeType === 'application/pdf' || extension === 'pdf') {
     return <PdfFileIcon size={64} />;
   }
-  
+
   // Spreadsheets (Excel)
   if (
     mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
@@ -181,12 +184,12 @@ export function getFileIconComponentLarge(
   ) {
     return <ExcelFileIcon size={64} />;
   }
-  
+
   // OpenDocument Spreadsheet (ODS)
   if (extension === 'ods') {
     return <Table className="h-16 w-16 text-green-600" />;
   }
-  
+
   // Presentations (PowerPoint)
   if (
     mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
@@ -195,12 +198,12 @@ export function getFileIconComponentLarge(
   ) {
     return <PowerPointFileIcon size={64} />;
   }
-  
+
   // OpenDocument Presentation (ODP)
   if (mimeType === 'application/vnd.oasis.opendocument.presentation' || extension === 'odp') {
     return <Presentation className="h-16 w-16 text-orange-500" />;
   }
-  
+
   // Word documents
   if (
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
@@ -210,24 +213,24 @@ export function getFileIconComponentLarge(
   ) {
     return <FileText className="h-16 w-16 text-blue-600" />;
   }
-  
+
   // SQL files
   if (extension === 'sql') {
     return <SqlFileIcon size={64} />;
   }
-  
+
   // JSON files
   if (mimeType === 'application/json' || extension === 'json') {
     return <FileCode className="h-16 w-16 text-yellow-500" />;
   }
-  
+
   // Text files
   if (
     extension === 'txt' || extension === 'log' || extension === 'readme'
   ) {
     return <TextFileIcon size={64} />;
   }
-  
+
   // Markdown and other text-based files
   if (
     mimeType?.startsWith('text/') ||
@@ -235,7 +238,7 @@ export function getFileIconComponentLarge(
   ) {
     return <FileText className="h-16 w-16 text-gray-400" />;
   }
-  
+
   // Code files
   if (
     extension === 'js' || extension === 'jsx' || extension === 'ts' || extension === 'tsx' ||
@@ -249,7 +252,7 @@ export function getFileIconComponentLarge(
   ) {
     return <FileCode className="h-16 w-16 text-yellow-600" />;
   }
-  
+
   // Archives
   if (
     mimeType?.includes('zip') ||
@@ -261,7 +264,7 @@ export function getFileIconComponentLarge(
   ) {
     return <Archive className="h-16 w-16 text-amber-600" />;
   }
-  
+
   // Default file icon
   return <FileIconType className="h-16 w-16 text-muted-foreground" />;
 }

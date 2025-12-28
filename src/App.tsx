@@ -11,6 +11,8 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Files from "./pages/Files";
+import Documents from "./pages/Documents";
+import DocumentEdit from "./pages/DocumentEdit";
 import Shared from "./pages/Shared";
 import SharedLink from "./pages/SharedLink";
 import Recent from "./pages/Recent";
@@ -22,6 +24,7 @@ import Users from "./pages/admin/Users";
 import Storage from "./pages/admin/Storage";
 import Settings from "./pages/admin/Settings";
 import AuditLogs from "./pages/admin/AuditLogs";
+import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,116 +35,140 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <OfflineSyncProvider>
-            <Routes>
-              <Route path="/auth" element={<Auth />} />
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/files"
-                element={
-                  <ProtectedRoute>
-                    <Files />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/shared"
-                element={
-                  <ProtectedRoute>
-                    <Shared />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/shared/:shareToken"
-                element={<SharedLink />}
-              />
-              <Route
-                path="/recent"
-                element={
-                  <ProtectedRoute>
-                    <Recent />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/favorites"
-                element={
-                  <ProtectedRoute>
-                    <Favorites />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/hidden"
-                element={
-                  <ProtectedRoute>
-                    <Hidden />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/trash"
-                element={
-                  <ProtectedRoute>
-                    <RecycleBin />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/search"
-                element={
-                  <ProtectedRoute>
-                    <SearchResults />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/users"
-                element={
-                  <ProtectedRoute minRole="admin">
-                    <Users />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/storage"
-                element={
-                  <ProtectedRoute minRole="admin">
-                    <Storage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/settings"
-                element={
-                  <ProtectedRoute minRole="admin">
-                    <Settings />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/audit"
-                element={
-                  <ProtectedRoute minRole="admin">
-                    <AuditLogs />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="*" element={<NotFound />} />
-          </Routes>
-          </OfflineSyncProvider>
-        </AuthProvider>
-      </BrowserRouter>
+        <BrowserRouter>
+          <AuthProvider>
+            <OfflineSyncProvider>
+              <Routes>
+                <Route path="/auth" element={<Auth />} />
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/analytics"
+                  element={
+                    <ProtectedRoute>
+                      <Analytics />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/files"
+                  element={
+                    <ProtectedRoute>
+                      <Files />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/documents"
+                  element={
+                    <ProtectedRoute>
+                      <Documents />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/documents/:id"
+                  element={
+                    <ProtectedRoute>
+                      <DocumentEdit />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/shared"
+                  element={
+                    <ProtectedRoute>
+                      <Shared />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/shared/:shareToken"
+                  element={<SharedLink />}
+                />
+                <Route
+                  path="/recent"
+                  element={
+                    <ProtectedRoute>
+                      <Recent />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/favorites"
+                  element={
+                    <ProtectedRoute>
+                      <Favorites />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/hidden"
+                  element={
+                    <ProtectedRoute>
+                      <Hidden />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/trash"
+                  element={
+                    <ProtectedRoute>
+                      <RecycleBin />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/search"
+                  element={
+                    <ProtectedRoute>
+                      <SearchResults />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/users"
+                  element={
+                    <ProtectedRoute minRole="admin">
+                      <Users />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/storage"
+                  element={
+                    <ProtectedRoute minRole="admin">
+                      <Storage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/settings"
+                  element={
+                    <ProtectedRoute minRole="admin">
+                      <Settings />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/audit"
+                  element={
+                    <ProtectedRoute minRole="admin">
+                      <AuditLogs />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </OfflineSyncProvider>
+          </AuthProvider>
+        </BrowserRouter>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>

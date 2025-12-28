@@ -14,6 +14,9 @@ import { Folder, File as FileIcon, Lock, Download, ArrowLeft, Loader2 } from 'lu
 import { toast } from 'sonner';
 import { formatFileSize } from '@/lib/fileUtils';
 import { format } from 'date-fns';
+import { ChatPanel } from '@/components/ai/ChatPanel';
+import { MessageSquare, X as CloseIcon, Sparkles } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 export default function SharedLink() {
   const { shareToken } = useParams<{ shareToken: string }>();
@@ -27,6 +30,10 @@ export default function SharedLink() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [folderFiles, setFolderFiles] = useState<FileType[]>([]);
   const [folderFolders, setFolderFolders] = useState<FolderType[]>([]);
+  const [branding, setBranding] = useState<{ logo: string | null, color: string }>({
+    logo: null,
+    color: '#0f172a'
+  });
 
   useEffect(() => {
     if (!shareToken) {
@@ -86,7 +93,7 @@ export default function SharedLink() {
             .eq('id', shareData.resource_id)
             .single();
           if (data) {
-            setFile(data as FileType);
+            setFile(data as any as FileType);
           }
         }
       } else {
@@ -108,13 +115,27 @@ export default function SharedLink() {
             .eq('id', shareData.resource_id)
             .single();
           if (data) {
-            setFolder(data as FolderType);
-            const folderFiles = await fileService.getFiles(data.id);
-            const folderFolders = await fileService.getFolders(data.id);
+            setFolder(data as any as FolderType);
+            const folderFiles = await fileService.getFiles((data as any).id);
+            const folderFolders = await fileService.getFolders((data as any).id);
             setFolderFiles(folderFiles);
             setFolderFolders(folderFolders);
           }
         }
+      }
+
+      // Fetch sharer's branding
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('custom_branding_logo_url, custom_branding_color')
+        .eq('id', shareData.shared_by)
+        .single();
+
+      if (profile) {
+        setBranding({
+          logo: (profile as any).custom_branding_logo_url,
+          color: (profile as any).custom_branding_color || '#0f172a'
+        });
       }
     } catch (error) {
       console.error('Error loading share:', error);
@@ -229,50 +250,73 @@ export default function SharedLink() {
     );
   }
 
+  const [chatOpen, setChatOpen] = useState(false);
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background relative overflow-hidden" style={{ '--brand-primary': branding.color } as any}>
+      {/* Branding Header */}
+      <div className="w-full h-1 bg-[var(--brand-primary)]" />
+      <div className="bg-background/80 backdrop-blur-md border-b sticky top-0 z-40">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {branding.logo ? (
+              <img src={branding.logo} alt="Brand Logo" className="h-8 object-contain" />
+            ) : (
+              <div className="h-8 w-8 bg-[var(--brand-primary)] rounded-lg flex items-center justify-center">
+                <FileIcon className="h-5 w-5 text-white" />
+              </div>
+            )}
+            <span className="font-bold">Viewer Portal</span>
+          </div>
+          <div className="text-xs text-muted-foreground font-medium uppercase tracking-widest hidden sm:block">
+            Powered by DeckStore
+          </div>
+        </div>
+      </div>
+
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="mb-6">
-          <Button variant="ghost" onClick={() => navigate('/')} className="mb-4">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Home
+          <Button variant="ghost" onClick={() => navigate('/')} className="mb-4 text-xs">
+            <ArrowLeft className="mr-2 h-3 w-3" />
+            Exit Portal
           </Button>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold">Shared Content</h1>
+              <h1 className="text-3xl font-bold tracking-tight">Shared Content</h1>
               <p className="text-muted-foreground">
-                {share.resource_type === 'file' ? 'File' : 'Folder'} shared with you
+                Document sharing secured with DeckStore Intelligence
               </p>
             </div>
             {share.access_level !== 'view' && file && (
-              <Button onClick={handleDownload}>
+              <Button onClick={handleDownload} variant="outline" className="rounded-full">
                 <Download className="mr-2 h-4 w-4" />
-                Download
+                Download Original
               </Button>
             )}
           </div>
         </div>
 
         {file && (
-          <Card>
+          <Card className="hover:shadow-lg transition-shadow border-primary/10">
             <CardContent className="pt-6">
               <div className="flex items-center gap-4">
-                <FileIcon className="h-12 w-12 text-primary" />
-                <div className="flex-1">
-                  <h2 className="text-xl font-semibold">{file.name}</h2>
+                <div className="h-16 w-16 bg-primary/10 rounded-2xl flex items-center justify-center shrink-0">
+                  <FileIcon className="h-8 w-8 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-xl font-semibold truncate">{file.name}</h2>
                   <p className="text-sm text-muted-foreground">
                     {formatFileSize(file.size)} • {format(new Date(file.updated_at), 'MMM d, yyyy')}
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  {share.access_level !== 'view' && (
-                    <Button variant="outline" onClick={handleDownload}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Download
-                    </Button>
-                  )}
-                  <Button onClick={() => setPreviewOpen(true)}>
-                    View
+                  <Button
+                    size="lg"
+                    className="rounded-full px-6 shadow-lg hover:opacity-90 transition-opacity"
+                    style={{ backgroundColor: 'var(--brand-primary)', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)' }}
+                    onClick={() => setPreviewOpen(true)}
+                  >
+                    Preview Deck
                   </Button>
                 </div>
               </div>
@@ -280,11 +324,14 @@ export default function SharedLink() {
           </Card>
         )}
 
+        {/* ... folder view logic ... */}
         {folder && (
-          <Card>
-            <CardHeader>
+          <Card className="border-primary/10">
+            <CardHeader className="bg-accent/5 rounded-t-xl">
               <div className="flex items-center gap-3">
-                <Folder className="h-8 w-8 text-primary" />
+                <div className="p-2 bg-[var(--brand-primary)]/10 rounded-lg">
+                  <Folder className="h-6 w-6 text-[var(--brand-primary)]" />
+                </div>
                 <div>
                   <CardTitle>{folder.name}</CardTitle>
                   <CardDescription>
@@ -293,33 +340,36 @@ export default function SharedLink() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               {folderFolders.length === 0 && folderFiles.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8">This folder is empty</p>
               ) : (
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {folderFolders.map((f) => (
                     <div
                       key={f.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 cursor-not-allowed"
+                      className="flex items-center gap-3 p-4 rounded-xl border bg-background hover:border-[var(--brand-primary)]/50 transition-colors shadow-sm cursor-not-allowed group"
                     >
-                      <Folder className="h-5 w-5 text-primary" />
-                      <span className="font-medium">{f.name}</span>
-                      <span className="text-xs text-muted-foreground ml-auto">Folder</span>
+                      <Folder className="h-5 w-5 text-[var(--brand-primary)]" />
+                      <span className="font-medium truncate">{f.name}</span>
                     </div>
                   ))}
                   {folderFiles.map((f) => (
                     <div
                       key={f.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 cursor-pointer"
+                      className="flex items-center gap-3 p-4 rounded-xl border bg-background hover:shadow-md hover:border-[var(--brand-primary)]/50 transition-all cursor-pointer group"
                       onClick={() => {
                         setFile(f);
                         setPreviewOpen(true);
                       }}
                     >
-                      <FileIcon className="h-5 w-5 text-muted-foreground" />
-                      <span className="font-medium">{f.name}</span>
-                      <span className="text-xs text-muted-foreground ml-auto">{formatFileSize(f.size)}</span>
+                      <div className="h-10 w-10 bg-muted group-hover:bg-[var(--brand-primary)]/10 rounded-lg flex items-center justify-center transition-colors">
+                        <FileIcon className="h-5 w-5 text-muted-foreground group-hover:text-[var(--brand-primary)]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate text-sm">{f.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{formatFileSize(f.size)}</p>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -333,6 +383,50 @@ export default function SharedLink() {
           onOpenChange={setPreviewOpen}
           file={file}
         />
+
+        {/* AI Chat Toggle & Panel */}
+        {file && (
+          <>
+            <motion.div
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="fixed bottom-6 right-6 z-50"
+            >
+              <Button
+                onClick={() => setChatOpen(!chatOpen)}
+                className="h-14 w-14 rounded-full shadow-2xl p-0 hover:opacity-90 transition-opacity"
+                style={{ backgroundColor: 'var(--brand-primary)' }}
+              >
+                {chatOpen ? <CloseIcon className="h-6 w-6 text-white" /> : <MessageSquare className="h-6 w-6 text-white" />}
+              </Button>
+            </motion.div>
+
+            <AnimatePresence>
+              {chatOpen && (
+                <motion.div
+                  initial={{ x: '100%' }}
+                  animate={{ x: 0 }}
+                  exit={{ x: '100%' }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                  className="fixed top-0 right-0 h-full w-[400px] bg-background border-l shadow-2xl z-[60] flex flex-col p-6"
+                >
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-bold text-lg flex items-center gap-2">
+                      <Sparkles className="h-5 w-5 text-primary" />
+                      Deck Intelligence
+                    </h3>
+                    <Button variant="ghost" size="icon" onClick={() => setChatOpen(false)}>
+                      <CloseIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <ChatPanel documentTitle={file.name} />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        )}
       </div>
     </div>
   );

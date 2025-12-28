@@ -103,21 +103,45 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Profiles policies
+DROP POLICY IF EXISTS "Users can view all profiles" ON public.profiles;
 CREATE POLICY "Users can view all profiles" ON public.profiles
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile" ON public.profiles
   FOR UPDATE USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
 CREATE POLICY "Users can insert own profile" ON public.profiles
   FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- User roles policies
+DROP POLICY IF EXISTS "Users can view all roles" ON public.user_roles;
 CREATE POLICY "Users can view all roles" ON public.user_roles
   FOR SELECT USING (true);
 
-CREATE POLICY "Admins can manage roles" ON public.user_roles
-  FOR ALL USING (
+DROP POLICY IF EXISTS "Admins can manage roles" ON public.user_roles;
+DROP POLICY IF EXISTS "Admins can insert roles" ON public.user_roles;
+CREATE POLICY "Admins can insert roles" ON public.user_roles
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND role IN ('admin', 'owner')
+    )
+  );
+
+DROP POLICY IF EXISTS "Admins can update roles" ON public.user_roles;
+CREATE POLICY "Admins can update roles" ON public.user_roles
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND role IN ('admin', 'owner')
+    )
+  );
+
+DROP POLICY IF EXISTS "Admins can delete roles" ON public.user_roles;
+CREATE POLICY "Admins can delete roles" ON public.user_roles
+  FOR DELETE USING (
     EXISTS (
       SELECT 1 FROM public.user_roles
       WHERE user_id = auth.uid() AND role IN ('admin', 'owner')
@@ -125,6 +149,7 @@ CREATE POLICY "Admins can manage roles" ON public.user_roles
   );
 
 -- Folders policies
+DROP POLICY IF EXISTS "Users can view folders they have access to" ON public.folders;
 CREATE POLICY "Users can view folders they have access to" ON public.folders
   FOR SELECT USING (
     deleted_at IS NULL AND (
@@ -133,15 +158,18 @@ CREATE POLICY "Users can view folders they have access to" ON public.folders
     )
   );
 
+DROP POLICY IF EXISTS "Users can create folders" ON public.folders;
 CREATE POLICY "Users can create folders" ON public.folders
   FOR INSERT WITH CHECK (owner_id = auth.uid());
 
+DROP POLICY IF EXISTS "Users can update folders they own or have write permission" ON public.folders;
 CREATE POLICY "Users can update folders they own or have write permission" ON public.folders
   FOR UPDATE USING (
     owner_id = auth.uid() OR
     has_folder_permission(id, auth.uid(), 'write')
   );
 
+DROP POLICY IF EXISTS "Users can delete folders they own or have delete permission" ON public.folders;
 CREATE POLICY "Users can delete folders they own or have delete permission" ON public.folders
   FOR DELETE USING (
     owner_id = auth.uid() OR
@@ -149,6 +177,7 @@ CREATE POLICY "Users can delete folders they own or have delete permission" ON p
   );
 
 -- Files policies
+DROP POLICY IF EXISTS "Users can view files they have access to" ON public.files;
 CREATE POLICY "Users can view files they have access to" ON public.files
   FOR SELECT USING (
     deleted_at IS NULL AND (
@@ -157,15 +186,18 @@ CREATE POLICY "Users can view files they have access to" ON public.files
     )
   );
 
+DROP POLICY IF EXISTS "Users can create files" ON public.files;
 CREATE POLICY "Users can create files" ON public.files
   FOR INSERT WITH CHECK (owner_id = auth.uid());
 
+DROP POLICY IF EXISTS "Users can update files they own or have write permission" ON public.files;
 CREATE POLICY "Users can update files they own or have write permission" ON public.files
   FOR UPDATE USING (
     owner_id = auth.uid() OR
     has_file_permission(id, auth.uid(), 'write')
   );
 
+DROP POLICY IF EXISTS "Users can delete files they own or have delete permission" ON public.files;
 CREATE POLICY "Users can delete files they own or have delete permission" ON public.files
   FOR DELETE USING (
     owner_id = auth.uid() OR
@@ -173,6 +205,7 @@ CREATE POLICY "Users can delete files they own or have delete permission" ON pub
   );
 
 -- File versions policies
+DROP POLICY IF EXISTS "Users can view file versions for accessible files" ON public.file_versions;
 CREATE POLICY "Users can view file versions for accessible files" ON public.file_versions
   FOR SELECT USING (
     EXISTS (
@@ -182,6 +215,7 @@ CREATE POLICY "Users can view file versions for accessible files" ON public.file
     )
   );
 
+DROP POLICY IF EXISTS "Users can create file versions for accessible files" ON public.file_versions;
 CREATE POLICY "Users can create file versions for accessible files" ON public.file_versions
   FOR INSERT WITH CHECK (
     EXISTS (
@@ -192,6 +226,7 @@ CREATE POLICY "Users can create file versions for accessible files" ON public.fi
   );
 
 -- Folder permissions policies
+DROP POLICY IF EXISTS "Users can view permissions for accessible folders" ON public.folder_permissions;
 CREATE POLICY "Users can view permissions for accessible folders" ON public.folder_permissions
   FOR SELECT USING (
     EXISTS (
@@ -201,6 +236,7 @@ CREATE POLICY "Users can view permissions for accessible folders" ON public.fold
     )
   );
 
+DROP POLICY IF EXISTS "Owners and admins can manage folder permissions" ON public.folder_permissions;
 CREATE POLICY "Owners and admins can manage folder permissions" ON public.folder_permissions
   FOR ALL USING (
     EXISTS (
@@ -211,6 +247,7 @@ CREATE POLICY "Owners and admins can manage folder permissions" ON public.folder
   );
 
 -- File permissions policies
+DROP POLICY IF EXISTS "Users can view permissions for accessible files" ON public.file_permissions;
 CREATE POLICY "Users can view permissions for accessible files" ON public.file_permissions
   FOR SELECT USING (
     EXISTS (
@@ -220,6 +257,7 @@ CREATE POLICY "Users can view permissions for accessible files" ON public.file_p
     )
   );
 
+DROP POLICY IF EXISTS "Owners and admins can manage file permissions" ON public.file_permissions;
 CREATE POLICY "Owners and admins can manage file permissions" ON public.file_permissions
   FOR ALL USING (
     EXISTS (
@@ -230,6 +268,7 @@ CREATE POLICY "Owners and admins can manage file permissions" ON public.file_per
   );
 
 -- Shares policies
+DROP POLICY IF EXISTS "Users can view shares they created or have access to" ON public.shares;
 CREATE POLICY "Users can view shares they created or have access to" ON public.shares
   FOR SELECT USING (
     shared_by = auth.uid() OR
@@ -245,6 +284,7 @@ CREATE POLICY "Users can view shares they created or have access to" ON public.s
     )
   );
 
+DROP POLICY IF EXISTS "Users can create shares for resources they own" ON public.shares;
 CREATE POLICY "Users can create shares for resources they own" ON public.shares
   FOR INSERT WITH CHECK (
     shared_by = auth.uid() AND (
@@ -257,13 +297,16 @@ CREATE POLICY "Users can create shares for resources they own" ON public.shares
     )
   );
 
+DROP POLICY IF EXISTS "Users can update their own shares" ON public.shares;
 CREATE POLICY "Users can update their own shares" ON public.shares
   FOR UPDATE USING (shared_by = auth.uid());
 
+DROP POLICY IF EXISTS "Users can delete their own shares" ON public.shares;
 CREATE POLICY "Users can delete their own shares" ON public.shares
   FOR DELETE USING (shared_by = auth.uid());
 
 -- Share access logs policies (admins and share creators)
+DROP POLICY IF EXISTS "Share creators can view access logs" ON public.share_access_logs;
 CREATE POLICY "Share creators can view access logs" ON public.share_access_logs
   FOR SELECT USING (
     EXISTS (
@@ -276,13 +319,16 @@ CREATE POLICY "Share creators can view access logs" ON public.share_access_logs
     )
   );
 
+DROP POLICY IF EXISTS "System can insert share access logs" ON public.share_access_logs;
 CREATE POLICY "System can insert share access logs" ON public.share_access_logs
   FOR INSERT WITH CHECK (true);
 
 -- Storage quotas policies
+DROP POLICY IF EXISTS "Users can view own quota" ON public.storage_quotas;
 CREATE POLICY "Users can view own quota" ON public.storage_quotas
   FOR SELECT USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Admins can view all quotas" ON public.storage_quotas;
 CREATE POLICY "Admins can view all quotas" ON public.storage_quotas
   FOR SELECT USING (
     EXISTS (
@@ -291,48 +337,62 @@ CREATE POLICY "Admins can view all quotas" ON public.storage_quotas
     )
   );
 
+DROP POLICY IF EXISTS "System can update quotas" ON public.storage_quotas;
 CREATE POLICY "System can update quotas" ON public.storage_quotas
   FOR UPDATE USING (true);
 
 -- Activity logs policies
+DROP POLICY IF EXISTS "Users can view their own activity logs" ON public.activity_logs;
 CREATE POLICY "Users can view their own activity logs" ON public.activity_logs
   FOR SELECT USING (user_id = auth.uid());
 
-CREATE POLICY "Admins can view all activity logs" ON public.activity_logs
+-- Users can view their own activity logs, admins can view all
+DROP POLICY IF EXISTS "Users can view own or admin all logs" ON public.activity_logs;
+CREATE POLICY "Users can view own or admin all logs" ON public.activity_logs
   FOR SELECT USING (
+    auth.uid() = user_id OR
     EXISTS (
       SELECT 1 FROM public.user_roles
       WHERE user_id = auth.uid() AND role IN ('admin', 'owner')
     )
   );
 
+DROP POLICY IF EXISTS "System can insert activity logs" ON public.activity_logs;
 CREATE POLICY "System can insert activity logs" ON public.activity_logs
   FOR INSERT WITH CHECK (true);
 
 -- Notification preferences policies
+DROP POLICY IF EXISTS "Users can manage own notification preferences" ON public.notification_preferences;
 CREATE POLICY "Users can manage own notification preferences" ON public.notification_preferences
   FOR ALL USING (user_id = auth.uid());
 
 -- Notifications policies
+DROP POLICY IF EXISTS "Users can view own notifications" ON public.notifications;
 CREATE POLICY "Users can view own notifications" ON public.notifications
   FOR SELECT USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Users can update own notifications" ON public.notifications;
 CREATE POLICY "Users can update own notifications" ON public.notifications
   FOR UPDATE USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "System can insert notifications" ON public.notifications;
 CREATE POLICY "System can insert notifications" ON public.notifications
   FOR INSERT WITH CHECK (true);
 
 -- Metadata tags policies
+DROP POLICY IF EXISTS "Users can view all tags" ON public.metadata_tags;
 CREATE POLICY "Users can view all tags" ON public.metadata_tags
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Users can create tags" ON public.metadata_tags;
 CREATE POLICY "Users can create tags" ON public.metadata_tags
   FOR INSERT WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Tag creators can update tags" ON public.metadata_tags;
 CREATE POLICY "Tag creators can update tags" ON public.metadata_tags
   FOR UPDATE USING (created_by = auth.uid());
 
+DROP POLICY IF EXISTS "Admins can delete tags" ON public.metadata_tags;
 CREATE POLICY "Admins can delete tags" ON public.metadata_tags
   FOR DELETE USING (
     EXISTS (
@@ -342,6 +402,7 @@ CREATE POLICY "Admins can delete tags" ON public.metadata_tags
   );
 
 -- File tags policies
+DROP POLICY IF EXISTS "Users can view file tags for accessible files" ON public.file_tags;
 CREATE POLICY "Users can view file tags for accessible files" ON public.file_tags
   FOR SELECT USING (
     EXISTS (
@@ -351,6 +412,7 @@ CREATE POLICY "Users can view file tags for accessible files" ON public.file_tag
     )
   );
 
+DROP POLICY IF EXISTS "Users can manage file tags for files they can edit" ON public.file_tags;
 CREATE POLICY "Users can manage file tags for files they can edit" ON public.file_tags
   FOR ALL USING (
     EXISTS (
@@ -359,5 +421,3 @@ CREATE POLICY "Users can manage file tags for files they can edit" ON public.fil
       AND (owner_id = auth.uid() OR has_file_permission(file_id, auth.uid(), 'write'))
     )
   );
-
-

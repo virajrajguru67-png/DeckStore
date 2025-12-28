@@ -1,12 +1,14 @@
 import { supabase } from '@/integrations/supabase/client';
 import { File, Folder } from '@/types/file';
 import { toast } from 'sonner';
+import { activityService } from './activityService';
+import { notificationService } from './notificationService';
 
 export const fileService = {
   async getFiles(folderId: string | null = null): Promise<File[]> {
     console.log('getFiles: Fetching files for folderId:', folderId);
-    const query = supabase
-      .from('files')
+    const query = (supabase
+      .from('files') as any)
       .select('*')
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
@@ -36,8 +38,8 @@ export const fileService = {
     console.log('getFiles: Successfully fetched files:', {
       folderId,
       fileCount: data?.length || 0,
-      fileNames: data?.map(f => f.name) || [],
-      fileDetails: data?.map(f => ({
+      fileNames: (data as any[])?.map((f: any) => f.name) || [],
+      fileDetails: (data as any[])?.map((f: any) => ({
         id: f.id,
         name: f.name,
         ownerId: f.owner_id,
@@ -55,8 +57,8 @@ export const fileService = {
 
   async getFolders(parentFolderId: string | null = null): Promise<Folder[]> {
     console.log('getFolders: Fetching folders for parentFolderId:', parentFolderId);
-    const query = supabase
-      .from('folders')
+    const query = (supabase
+      .from('folders') as any)
       .select('*')
       .is('deleted_at', null)
       .order('name', { ascending: true });
@@ -86,12 +88,12 @@ export const fileService = {
     console.log('getFolders: Successfully fetched folders:', {
       parentFolderId,
       folderCount: data?.length || 0,
-      folderNames: data?.map(f => f.name) || [],
+      folderNames: (data as any[])?.map((f: any) => f.name) || [],
     });
 
     // Filter out hidden folders
-    const visibleFolders = ((data as Folder[]) || []).filter(folder => {
-      return !(folder as any).metadata?.is_hidden;
+    const visibleFolders = ((data as Folder[]) || []).filter((folder: any) => {
+      return !folder.metadata?.is_hidden;
     });
 
     return visibleFolders;
@@ -104,8 +106,8 @@ export const fileService = {
     // Generate path
     let path = `/${name}`;
     if (parentFolderId) {
-      const { data: parentFolder } = await supabase
-        .from('folders')
+      const { data: parentFolder } = await (supabase
+        .from('folders') as any)
         .select('path')
         .eq('id', parentFolderId)
         .single();
@@ -132,6 +134,13 @@ export const fileService = {
       return null;
     }
 
+    // Log activity
+    if (data) {
+      await activityService.logActivity('create', 'folder', (data as any).id, {
+        name: (data as any).name
+      });
+    }
+
     return data as Folder;
   },
 
@@ -143,8 +152,8 @@ export const fileService = {
     }
 
     // First check if user owns the file
-    const { data: file, error: fetchError } = await supabase
-      .from('files')
+    const { data: file, error: fetchError } = await (supabase
+      .from('files') as any)
       .select('id, owner_id, name')
       .eq('id', fileId)
       .single();
@@ -161,8 +170,8 @@ export const fileService = {
     }
 
     // Verify ownership one more time before update
-    const { data: verifyFile } = await supabase
-      .from('files')
+    const { data: verifyFile } = await (supabase
+      .from('files') as any)
       .select('id, owner_id')
       .eq('id', fileId)
       .eq('owner_id', user.id)
@@ -215,6 +224,22 @@ export const fileService = {
       return false;
     }
 
+    // Log activity
+    await activityService.logActivity('delete', 'file', fileId, {
+      name: (file as any)?.name || 'Unknown File'
+    });
+
+    // Notify collaborators
+    await notificationService.notifyResourceCollaborators(
+      'file',
+      fileId,
+      user.id,
+      'file_deleted',
+      'File Deleted',
+      `${(file as any)?.name || 'A file'} was deleted by a collaborator.`,
+      { name: (file as any)?.name }
+    );
+
     return true;
   },
 
@@ -226,8 +251,8 @@ export const fileService = {
     }
 
     // First check if user owns the folder
-    const { data: folder, error: fetchError } = await supabase
-      .from('folders')
+    const { data: folder, error: fetchError } = await (supabase
+      .from('folders') as any)
       .select('id, owner_id, name')
       .eq('id', folderId)
       .single();
@@ -244,8 +269,8 @@ export const fileService = {
     }
 
     // Verify ownership one more time before update
-    const { data: verifyFolder } = await supabase
-      .from('folders')
+    const { data: verifyFolder } = await (supabase
+      .from('folders') as any)
       .select('id, owner_id')
       .eq('id', folderId)
       .eq('owner_id', user.id)
@@ -264,6 +289,10 @@ export const fileService = {
     });
 
     if (!functionError && functionResult) {
+      // Log activity
+      await activityService.logActivity('delete', 'folder', folderId, {
+        name: (folder as any)?.name || 'Unknown Folder'
+      });
       return true;
     }
 
@@ -298,6 +327,22 @@ export const fileService = {
       return false;
     }
 
+    // Log activity
+    await activityService.logActivity('delete', 'folder', folderId, {
+      name: (folder as any)?.name || 'Unknown Folder'
+    });
+
+    // Notify collaborators
+    await notificationService.notifyResourceCollaborators(
+      'folder',
+      folderId,
+      user.id,
+      'folder_deleted',
+      'Folder Deleted',
+      `${(folder as any)?.name || 'A folder'} was deleted by a collaborator.`,
+      { name: (folder as any)?.name }
+    );
+
     return true;
   },
 
@@ -313,13 +358,32 @@ export const fileService = {
       return false;
     }
 
+    // Log activity
+    await activityService.logActivity('rename', 'file', fileId, {
+      new_name: newName
+    });
+
+    // Notify collaborators
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await notificationService.notifyResourceCollaborators(
+        'file',
+        fileId,
+        user.id,
+        'file_renamed',
+        'File Renamed',
+        `A file was renamed to "${newName}" by a collaborator.`,
+        { new_name: newName }
+      );
+    }
+
     return true;
   },
 
   async renameFolder(folderId: string, newName: string): Promise<boolean> {
     // Update folder name and path
-    const { data: folder } = await supabase
-      .from('folders')
+    const { data: folder } = await (supabase
+      .from('folders') as any)
       .select('path, parent_folder_id')
       .eq('id', folderId)
       .single();
@@ -343,12 +407,33 @@ export const fileService = {
     }
 
     // Update paths for child folders and files (would need recursive update)
+
+    // Log activity
+    await activityService.logActivity('rename', 'folder', folderId, {
+      new_name: newName,
+      old_path: oldPath
+    });
+
+    // Notify collaborators
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await notificationService.notifyResourceCollaborators(
+        'folder',
+        folderId,
+        user.id,
+        'folder_renamed',
+        'Folder Renamed',
+        `A folder was renamed to "${newName}" by a collaborator.`,
+        { new_name: newName }
+      );
+    }
+
     return true;
   },
 
   async moveFile(fileId: string, targetFolderId: string | null): Promise<boolean> {
-    const { data: file } = await supabase
-      .from('files')
+    const { data: file } = await (supabase
+      .from('files') as any)
       .select('name, folder_id')
       .eq('id', fileId)
       .single();
@@ -358,8 +443,8 @@ export const fileService = {
     const fileName = (file as any).name as string;
     let newPath = `/${fileName}`;
     if (targetFolderId) {
-      const { data: targetFolder } = await supabase
-        .from('folders')
+      const { data: targetFolder } = await (supabase
+        .from('folders') as any)
         .select('path')
         .eq('id', targetFolderId)
         .single();
@@ -384,12 +469,32 @@ export const fileService = {
       return false;
     }
 
+    // Log activity
+    await activityService.logActivity('move', 'file', fileId, {
+      target_folder_id: targetFolderId,
+      new_path: newPath
+    });
+
+    // Notify collaborators
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await notificationService.notifyResourceCollaborators(
+        'file',
+        fileId,
+        user.id,
+        'file_moved',
+        'File Moved',
+        'A collaborator moved a file you have access to.',
+        { target_folder_id: targetFolderId }
+      );
+    }
+
     return true;
   },
 
   async moveFolder(folderId: string, targetFolderId: string | null): Promise<boolean> {
-    const { data: folder } = await supabase
-      .from('folders')
+    const { data: folder } = await (supabase
+      .from('folders') as any)
       .select('name, path')
       .eq('id', folderId)
       .single();
@@ -399,8 +504,8 @@ export const fileService = {
     const folderName = (folder as any).name as string;
     let newPath = `/${folderName}`;
     if (targetFolderId) {
-      const { data: targetFolder } = await supabase
-        .from('folders')
+      const { data: targetFolder } = await (supabase
+        .from('folders') as any)
         .select('path')
         .eq('id', targetFolderId)
         .single();
@@ -431,8 +536,8 @@ export const fileService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const { data: sourceFile } = await supabase
-      .from('files')
+    const { data: sourceFile } = await (supabase
+      .from('files') as any)
       .select('*')
       .eq('id', fileId)
       .single();
@@ -471,8 +576,8 @@ export const fileService = {
     // Create new file record
     let newPath = `/${sourceFileName}`;
     if (targetFolderId) {
-      const { data: targetFolder } = await supabase
-        .from('folders')
+      const { data: targetFolder } = await (supabase
+        .from('folders') as any)
         .select('path')
         .eq('id', targetFolderId)
         .single();
@@ -483,8 +588,8 @@ export const fileService = {
     }
 
     const sourceFileData = sourceFile as any;
-    const { data: newFile, error: dbError } = await supabase
-      .from('files')
+    const { data: newFile, error: dbError } = await (supabase
+      .from('files') as any)
       .insert({
         name: sourceFileName,
         path: newPath,
@@ -520,8 +625,8 @@ export const fileService = {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const thirtyDaysAgoISO = thirtyDaysAgo.toISOString();
 
-    const { data, error } = await supabase
-      .from('files')
+    const { data, error } = await (supabase
+      .from('files') as any)
       .select('*')
       .eq('owner_id', user.id) // Only show files owned by current user
       .not('deleted_at', 'is', null) // Must have deleted_at set
@@ -545,8 +650,8 @@ export const fileService = {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const thirtyDaysAgoISO = thirtyDaysAgo.toISOString();
 
-    const { data, error } = await supabase
-      .from('folders')
+    const { data, error } = await (supabase
+      .from('folders') as any)
       .select('*')
       .eq('owner_id', user.id) // Only show folders owned by current user
       .not('deleted_at', 'is', null) // Must have deleted_at set
@@ -573,6 +678,9 @@ export const fileService = {
       return false;
     }
 
+    // Log activity
+    await activityService.logActivity('restore', 'file', fileId);
+
     return true;
   },
 
@@ -588,13 +696,16 @@ export const fileService = {
       return false;
     }
 
+    // Log activity
+    await activityService.logActivity('restore', 'folder', folderId);
+
     return true;
   },
 
   async permanentlyDeleteFile(fileId: string): Promise<boolean> {
     try {
       // First, try using a database function if it exists (bypasses RLS)
-      const { data: functionResult, error: functionError } = await supabase.rpc('permanently_delete_file', {
+      const { data: functionResult, error: functionError } = await (supabase.rpc as any)('permanently_delete_file', {
         file_id_param: fileId
       });
 
@@ -605,8 +716,8 @@ export const fileService = {
 
       // Fallback to direct delete if function doesn't exist
       // Get file to delete storage
-      const { data: file } = await supabase
-        .from('files')
+      const { data: file } = await (supabase
+        .from('files') as any)
         .select('storage_key, owner_id')
         .eq('id', fileId)
         .single();
@@ -630,7 +741,7 @@ export const fileService = {
         const { error: storageError } = await supabase.storage
           .from('files')
           .remove([(file as any).storage_key as string]);
-        
+
         if (storageError) {
           console.warn('Error deleting file from storage:', storageError);
           // Continue with database delete even if storage delete fails
@@ -638,8 +749,8 @@ export const fileService = {
       }
 
       // Delete from database
-      const { error } = await supabase
-        .from('files')
+      const { error } = await (supabase
+        .from('files') as any)
         .delete()
         .eq('id', fileId)
         .eq('owner_id', user.id); // Extra safety check
@@ -649,6 +760,11 @@ export const fileService = {
         toast.error('Failed to permanently delete file: ' + (error.message || 'Unknown error'));
         return false;
       }
+
+      // Log activity
+      await activityService.logActivity('delete', 'file', fileId, {
+        permanent: true
+      });
 
       return true;
     } catch (error) {
@@ -661,7 +777,7 @@ export const fileService = {
   async permanentlyDeleteFolder(folderId: string): Promise<boolean> {
     try {
       // First, try using a database function if it exists (bypasses RLS)
-      const { data: functionResult, error: functionError } = await supabase.rpc('permanently_delete_folder', {
+      const { data: functionResult, error: functionError } = await (supabase.rpc as any)('permanently_delete_folder', {
         folder_id_param: folderId
       });
 
@@ -672,8 +788,8 @@ export const fileService = {
 
       // Fallback to direct delete if function doesn't exist
       // Get folder to check ownership
-      const { data: folder } = await supabase
-        .from('folders')
+      const { data: folder } = await (supabase
+        .from('folders') as any)
         .select('owner_id')
         .eq('id', folderId)
         .single();
@@ -695,9 +811,9 @@ export const fileService = {
       // Note: In a production system, you might want to also delete all files and subfolders
       // For now, we'll just delete the folder record
       // Files and subfolders will be orphaned (you may want to handle this differently)
-      
-      const { error } = await supabase
-        .from('folders')
+
+      const { error } = await (supabase
+        .from('folders') as any)
         .delete()
         .eq('id', folderId)
         .eq('owner_id', user.id); // Extra safety check
@@ -719,13 +835,13 @@ export const fileService = {
   async getFolderCounts(folderId: string): Promise<{ files: number; folders: number }> {
     try {
       const [filesResult, foldersResult] = await Promise.all([
-        supabase
-          .from('files')
+        (supabase
+          .from('files') as any)
           .select('id', { count: 'exact', head: true })
           .eq('folder_id', folderId)
           .is('deleted_at', null),
-        supabase
-          .from('folders')
+        (supabase
+          .from('folders') as any)
           .select('id', { count: 'exact', head: true })
           .eq('parent_folder_id', folderId)
           .is('deleted_at', null),
@@ -743,8 +859,8 @@ export const fileService = {
 
   async getUserProfile(userId: string): Promise<{ full_name: string; email: string } | null> {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
+      const { data, error } = await (supabase
+        .from('profiles') as any)
         .select('full_name, email')
         .eq('id', userId)
         .single();
@@ -809,9 +925,9 @@ export const fileService = {
       }
 
       console.log('getFolderById: Folder fetched successfully:', {
-        folderId: data.id,
-        folderName: data.name,
-        ownerId: data.owner_id,
+        folderId: (data as any).id,
+        folderName: (data as any).name,
+        ownerId: (data as any).owner_id,
       });
 
       return { data: data as Folder, error: null };
@@ -823,8 +939,8 @@ export const fileService = {
 
   async toggleFavoriteFile(fileId: string, isFavorite: boolean): Promise<boolean> {
     try {
-      const { data: file } = await supabase
-        .from('files')
+      const { data: file } = await (supabase
+        .from('files') as any)
         .select('metadata')
         .eq('id', fileId)
         .single();
@@ -834,11 +950,11 @@ export const fileService = {
         return false;
       }
 
-      const metadata = file.metadata || {};
+      const metadata = (file as any).metadata || {};
       metadata.is_favorite = isFavorite;
 
-      const { error } = await supabase
-        .from('files')
+      const { error } = await (supabase
+        .from('files') as any)
         .update({ metadata })
         .eq('id', fileId);
 
@@ -861,8 +977,8 @@ export const fileService = {
     try {
       // For folders, we'll use a metadata JSONB column if it exists, or create a favorites table
       // For now, let's check if folders table has metadata column
-      const { data: folder } = await supabase
-        .from('folders')
+      const { data: folder } = await (supabase
+        .from('folders') as any)
         .select('*')
         .eq('id', folderId)
         .single();
@@ -879,8 +995,8 @@ export const fileService = {
       const metadata = (folder as any).metadata || {};
       metadata.is_favorite = isFavorite;
 
-      const { error } = await supabase
-        .from('folders')
+      const { error } = await (supabase
+        .from('folders') as any)
         .update({ metadata: metadata as any })
         .eq('id', folderId);
 
@@ -906,8 +1022,8 @@ export const fileService = {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      const { data, error } = await supabase
-        .from('files')
+      const { data, error } = await (supabase
+        .from('files') as any)
         .select('*')
         .is('deleted_at', null)
         .eq('owner_id', user.id)
@@ -931,8 +1047,8 @@ export const fileService = {
       if (!user) return [];
 
       // Try to fetch folders with favorite metadata
-      const { data, error } = await supabase
-        .from('folders')
+      const { data, error } = await (supabase
+        .from('folders') as any)
         .select('*')
         .is('deleted_at', null)
         .eq('owner_id', user.id)
@@ -956,8 +1072,8 @@ export const fileService = {
 
   async toggleHiddenFile(fileId: string, isHidden: boolean): Promise<boolean> {
     try {
-      const { data: file } = await supabase
-        .from('files')
+      const { data: file } = await (supabase
+        .from('files') as any)
         .select('metadata')
         .eq('id', fileId)
         .single();
@@ -967,11 +1083,11 @@ export const fileService = {
         return false;
       }
 
-      const metadata = file.metadata || {};
+      const metadata = (file as any).metadata || {};
       metadata.is_hidden = isHidden;
 
-      const { error } = await supabase
-        .from('files')
+      const { error } = await (supabase
+        .from('files') as any)
         .update({ metadata })
         .eq('id', fileId);
 
@@ -992,8 +1108,8 @@ export const fileService = {
 
   async toggleHiddenFolder(folderId: string, isHidden: boolean): Promise<boolean> {
     try {
-      const { data: folder } = await supabase
-        .from('folders')
+      const { data: folder } = await (supabase
+        .from('folders') as any)
         .select('*')
         .eq('id', folderId)
         .single();
@@ -1006,8 +1122,8 @@ export const fileService = {
       const metadata = (folder as any).metadata || {};
       metadata.is_hidden = isHidden;
 
-      const { error } = await supabase
-        .from('folders')
+      const { error } = await (supabase
+        .from('folders') as any)
         .update({ metadata: metadata as any })
         .eq('id', folderId);
 
@@ -1031,8 +1147,8 @@ export const fileService = {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      const { data, error } = await supabase
-        .from('files')
+      const { data, error } = await (supabase
+        .from('files') as any)
         .select('*')
         .is('deleted_at', null)
         .eq('owner_id', user.id)
@@ -1055,8 +1171,8 @@ export const fileService = {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      const { data, error } = await supabase
-        .from('folders')
+      const { data, error } = await (supabase
+        .from('folders') as any)
         .select('*')
         .is('deleted_at', null)
         .eq('owner_id', user.id)

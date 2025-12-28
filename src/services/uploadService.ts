@@ -1,6 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
 import { File } from '@/types/file';
 import { toast } from 'sonner';
+import { activityService } from './activityService';
+import { notificationService } from './notificationService';
 
 interface UploadOptions {
   folderId?: string | null;
@@ -38,20 +40,20 @@ export const uploadService = {
           onUploadProgress: (progress) => {
             // Calculate progress percentage
             // Supabase progress: { loaded: number, total: number }
-            const progressPercent = progress.total > 0 
+            const progressPercent = progress.total > 0
               ? (progress.loaded / progress.total) * 90 // Use 90% for upload, remaining for DB operations
               : 50;
-            
+
             if (options.onProgress) {
               options.onProgress(progressPercent);
             }
           },
-        });
+        } as any);
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
-        toast.error('Failed to upload file', { 
-          description: uploadError.message || 'Please check your storage bucket configuration' 
+        toast.error('Failed to upload file', {
+          description: uploadError.message || 'Please check your storage bucket configuration'
         });
         return null;
       }
@@ -63,8 +65,8 @@ export const uploadService = {
       // Try to get folder path, but don't fail if we can't (RLS might block it)
       let path = `/${file.name}`;
       if (options.folderId) {
-        const { data: folder, error: folderError } = await supabase
-          .from('folders')
+        const { data: folder, error: folderError } = await (supabase
+          .from('folders') as any)
           .select('path')
           .eq('id', options.folderId)
           .is('deleted_at', null)
@@ -94,8 +96,8 @@ export const uploadService = {
         path,
       });
 
-      const { data: fileRecord, error: dbError } = await supabase
-        .from('files')
+      const { data: fileRecord, error: dbError } = await (supabase
+        .from('files') as any)
         .insert({
           name: file.name,
           path,
@@ -107,7 +109,7 @@ export const uploadService = {
           parent_path: options.folderId ? null : '/',
           storage_key: storageKey,
           version_number: 1,
-        } as any)
+        })
         .select()
         .single();
 
@@ -124,21 +126,21 @@ export const uploadService = {
         // If it's an RLS error, provide more helpful message
         if (dbError.code === '42501') {
           if (options.folderId) {
-            toast.error('Permission denied', { 
-              description: 'You do not have permission to upload files to this folder. You need write or admin access.' 
+            toast.error('Permission denied', {
+              description: 'You do not have permission to upload files to this folder. You need write or admin access.'
             });
           } else {
-            toast.error('Permission denied', { 
-              description: 'You do not have permission to upload files.' 
+            toast.error('Permission denied', {
+              description: 'You do not have permission to upload files.'
             });
           }
         } else if (dbError.message?.includes('folder') || dbError.message?.includes('not found')) {
-          toast.error('Folder not found', { 
-            description: 'The folder you are trying to upload to may not exist or you may not have access to it.' 
+          toast.error('Folder not found', {
+            description: 'The folder you are trying to upload to may not exist or you may not have access to it.'
           });
         } else {
-          toast.error('Failed to save file record', { 
-            description: dbError.message || 'Please check your database configuration' 
+          toast.error('Failed to save file record', {
+            description: dbError.message || 'Please check your database configuration'
           });
         }
 
@@ -157,6 +159,31 @@ export const uploadService = {
       // Update storage quota
       await this.updateStorageQuota(user.id, file.size);
 
+      // Log activity
+      if (fileRecord) {
+        await activityService.logActivity('upload', 'file', fileRecord.id, {
+          name: fileRecord.name,
+          size: fileRecord.size,
+          mime_type: fileRecord.mime_type
+        });
+
+        // Notify collaborators if uploaded to a shared folder
+        if (options.folderId) {
+          const { data: profile } = await (supabase.from('profiles') as any).select('full_name').eq('id', user.id).single();
+          const userName = profile?.full_name || user.email || 'Someone';
+
+          await notificationService.notifyResourceCollaborators(
+            'folder',
+            options.folderId,
+            user.id,
+            'file_added',
+            'New File Added',
+            `${userName} added "${fileRecord.name}" to a shared folder.`,
+            { file_id: fileRecord.id, file_name: fileRecord.name }
+          );
+        }
+      }
+
       toast.success('File uploaded successfully');
       return fileRecord as File;
     } catch (error) {
@@ -168,8 +195,8 @@ export const uploadService = {
 
   async updateStorageQuota(userId: string, fileSize: number): Promise<void> {
     try {
-      const { data: quota, error: fetchError } = await supabase
-        .from('storage_quotas')
+      const { data: quota, error: fetchError } = await (supabase
+        .from('storage_quotas') as any)
         .select('used_bytes')
         .eq('user_id', userId)
         .maybeSingle();
@@ -180,23 +207,23 @@ export const uploadService = {
       }
 
       if (quota) {
-        const { error: updateError } = await supabase
-          .from('storage_quotas')
-          .update({ used_bytes: quota.used_bytes + fileSize })
+        const { error: updateError } = await (supabase
+          .from('storage_quotas') as any)
+          .update({ used_bytes: (quota as any).used_bytes + fileSize })
           .eq('user_id', userId);
-        
+
         if (updateError) {
           console.error('Error updating quota:', updateError);
         }
       } else {
-        const { error: insertError } = await supabase
-          .from('storage_quotas')
+        const { error: insertError } = await (supabase
+          .from('storage_quotas') as any)
           .insert({
             user_id: userId,
             used_bytes: fileSize,
             total_quota_bytes: 10737418240, // 10GB default
           });
-        
+
         if (insertError) {
           console.error('Error creating quota:', insertError);
         }
@@ -235,7 +262,7 @@ export const uploadService = {
 
       if (error) {
         console.error('getDownloadUrl: Error creating signed URL:', {
-          errorCode: error.statusCode || error.error || 'unknown',
+          errorCode: (error as any).statusCode || (error as any).error || 'unknown',
           errorMessage: error.message,
           errorName: error.name,
           storageKey,
@@ -243,9 +270,9 @@ export const uploadService = {
           storageKeyParts: storageKey.split('/'),
           fullError: error,
         });
-        
+
         // Check if it's a permission error
-        if (error.message?.includes('permission') || error.message?.includes('403') || error.message?.includes('denied') || error.statusCode === 403) {
+        if (error.message?.includes('permission') || error.message?.includes('403') || error.message?.includes('denied') || (error as any).statusCode === 403) {
           console.error('getDownloadUrl: ❌ Permission denied (403)');
           console.error('getDownloadUrl: User ID:', user.id);
           console.error('getDownloadUrl: Storage key:', storageKey);
@@ -255,10 +282,10 @@ export const uploadService = {
           console.error('  3. Storage key format mismatch');
           console.error('getDownloadUrl: Run DIAGNOSE_FILE_PREVIEW.sql to check permissions');
         }
-        
+
         // Check if file doesn't exist
         const errorMsg = error.message?.toLowerCase() || '';
-        if (errorMsg.includes('not found') || errorMsg.includes('404') || errorMsg.includes('object not found') || error.statusCode === 404) {
+        if (errorMsg.includes('not found') || errorMsg.includes('404') || errorMsg.includes('object not found') || (error as any).statusCode === 404) {
           console.error('getDownloadUrl: ❌ File not found in storage (404)');
           console.error('getDownloadUrl: Storage key being used:', storageKey);
           console.error('getDownloadUrl: Possible causes:');
@@ -266,7 +293,7 @@ export const uploadService = {
           console.error('  2. Storage key in database does not match actual file path');
           console.error('  3. File was never uploaded successfully');
         }
-        
+
         return null;
       }
 

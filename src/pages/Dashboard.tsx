@@ -7,7 +7,7 @@ import { fileService } from '@/services/fileService';
 import { useQuery } from '@tanstack/react-query';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertTriangle, Clock, File as FileIcon } from 'lucide-react';
+import { AlertTriangle, Clock, File as FileIcon, Folder as FolderIcon, Share2 } from 'lucide-react';
 import { FileListView } from '@/components/file-explorer/FileListView';
 import { File, Folder } from '@/types/file';
 import { useState } from 'react';
@@ -106,11 +106,11 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout title="Dashboard" subtitle="Welcome to VaultNexus">
-      <div className="space-y-4">
-      
+      <div className="space-y-6">
+
 
         {quotaWarning && (
-          <Alert variant={quotaCritical ? "destructive" : "default"}>
+          <Alert variant={quotaCritical ? "destructive" : "default"} className="animate-slide-down border shadow-sm">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               {quotaCritical
@@ -120,71 +120,92 @@ export default function Dashboard() {
           </Alert>
         )}
 
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Storage Used</CardTitle>
-              <CardDescription>
-                {quotaLoading ? 'Loading...' : `${formatBytes(quota?.used_bytes || 0)} / ${formatBytes(quota?.total_quota_bytes || 0)}`}
-              </CardDescription>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card className="hover:shadow-md transition-shadow duration-300">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Storage Used</CardTitle>
             </CardHeader>
             <CardContent>
-              {quota && (
+              {quota ? (
                 <>
-                  <Progress value={quota.percentage} className="mb-2" />
-                  <p className="text-2xl font-bold">{quota.percentage.toFixed(1)}%</p>
+                  <div className="text-2xl font-bold">{formatBytes(quota?.used_bytes || 0)} <span className="text-xs text-muted-foreground font-normal">/ {formatBytes(quota?.total_quota_bytes || 0)}</span></div>
+                  <Progress value={quota.percentage} className="mt-3 h-2" />
                 </>
+              ) : (
+                <div className="text-2xl font-bold">Loading...</div>
               )}
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Files</CardTitle>
-              <CardDescription>Total files</CardDescription>
+
+          <Card className="hover:shadow-md transition-shadow duration-300 group cursor-pointer" onClick={() => navigate('/files')}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Files</CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{files.length}</p>
+            <CardContent className="flex items-center justify-between">
+              <div className="text-2xl font-bold">{files.length}</div>
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <FileIcon className="h-4 w-4 text-primary" />
+              </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Folders</CardTitle>
-              <CardDescription>Total folders</CardDescription>
+
+          <Card className="hover:shadow-md transition-shadow duration-300 group cursor-pointer" onClick={() => navigate('/files')}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Folders</CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{folders.length}</p>
+            <CardContent className="flex items-center justify-between">
+              <div className="text-2xl font-bold">{folders.length}</div>
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <FolderIcon className="h-4 w-4 text-primary" />
+              </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Shared</CardTitle>
-              <CardDescription>Active shares</CardDescription>
+
+          <Card className="hover:shadow-md transition-shadow duration-300 group cursor-pointer" onClick={() => navigate('/shared')}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Shared</CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{sharedCount}</p>
+            <CardContent className="flex items-center justify-between">
+              <div className="text-2xl font-bold">{sharedCount}</div>
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <Share2 className="h-4 w-4 text-primary" />
+              </div>
             </CardContent>
           </Card>
         </div>
 
         {/* Recent Files & Folders Section */}
-        <Card>
+        <Card className="border-border/60 shadow-sm">
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-muted-foreground" />
-              <CardTitle>Recent Files & Folders</CardTitle>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Clock className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Recent Activity</CardTitle>
+                  <CardDescription>Recently accessed files and folders</CardDescription>
+                </div>
+              </div>
             </div>
-            <CardDescription>Recently accessed or modified files and folders</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-2">
             {recentFilesLoading ? (
-              <div className="text-center py-8 text-muted-foreground">Loading recent items...</div>
+              <div className="text-center py-12 text-muted-foreground animate-pulse">Loading recent items...</div>
             ) : recentItems.files.length === 0 && recentItems.folders.length === 0 ? (
-              <div className="text-center py-12">
-                <FileIcon className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No recent files or folders</p>
+              <div className="text-center py-16 flex flex-col items-center">
+                <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                  <FileIcon className="h-8 w-8 text-muted-foreground/50" />
+                </div>
+                <h3 className="text-lg font-medium text-foreground">No recent activity</h3>
+                <p className="text-muted-foreground text-sm max-w-xs mx-auto mt-1">Start uploading or creating files to see them here.</p>
               </div>
             ) : (
-              <div className="h-[400px]">
+              // Using a slightly customized view - maybe grid or list depending on preference.
+              // Reusing FileListView but it might need better styling if it looks too plain. 
+              // Given the instruction for "stylish", let's ensure FileListView is good or wrap it well.
+              // Assuming FileListView renders rows. We'll wrap it in a cleaner container.
+              <div className="min-h-[300px]">
                 <FileListView
                   folders={recentItems.folders}
                   files={recentItems.files}
@@ -195,8 +216,8 @@ export default function Dashboard() {
                     setSelectedFile(file);
                     setPreviewOpen(true);
                   }}
-                  onFileAction={() => {}}
-                  onSelectionChange={() => {}}
+                  onFileAction={() => { }}
+                  onSelectionChange={() => { }}
                 />
               </div>
             )}

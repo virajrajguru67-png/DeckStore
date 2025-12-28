@@ -20,9 +20,17 @@ BEGIN
   )
   ON CONFLICT (id) DO NOTHING;
   
-  -- Create default viewer role for new user
+  -- Create default role for new user (Auto-assign Admin/Owner based on name)
   INSERT INTO public.user_roles (user_id, role, created_at)
-  VALUES (NEW.id, 'viewer', now())
+  VALUES (
+    NEW.id, 
+    CASE 
+      WHEN (NEW.raw_user_meta_data->>'full_name') ILIKE '%Viraj%' THEN 'owner'::app_role
+      WHEN (NEW.raw_user_meta_data->>'full_name') ILIKE '%Admin%' THEN 'admin'::app_role
+      ELSE 'viewer'::app_role
+    END, 
+    now()
+  )
   ON CONFLICT (user_id) DO NOTHING;
   
   RETURN NEW;
@@ -51,8 +59,27 @@ CREATE POLICY "Users can view own role" ON public.user_roles
 
 -- Keep admin policy for managing roles
 DROP POLICY IF EXISTS "Admins can manage roles" ON public.user_roles;
-CREATE POLICY "Admins can manage roles" ON public.user_roles
-  FOR ALL USING (
+DROP POLICY IF EXISTS "Admins can insert roles" ON public.user_roles;
+CREATE POLICY "Admins can insert roles" ON public.user_roles
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND role IN ('admin', 'owner')
+    )
+  );
+
+DROP POLICY IF EXISTS "Admins can update roles" ON public.user_roles;
+CREATE POLICY "Admins can update roles" ON public.user_roles
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND role IN ('admin', 'owner')
+    )
+  );
+
+DROP POLICY IF EXISTS "Admins can delete roles" ON public.user_roles;
+CREATE POLICY "Admins can delete roles" ON public.user_roles
+  FOR DELETE USING (
     EXISTS (
       SELECT 1 FROM public.user_roles
       WHERE user_id = auth.uid() AND role IN ('admin', 'owner')

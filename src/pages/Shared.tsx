@@ -54,15 +54,16 @@ export default function Shared() {
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<{ id: string; name: string; type: 'file' | 'folder' } | null>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
-  
+
   // Fetch files and folders for the current shared folder
   // Use shorter refetch interval (3 seconds) for shared folders to see updates faster
   const { files, folders, isLoading: isLoadingFolder, refresh } = useFiles(
     currentFolderId,
     currentFolderId ? { refetchInterval: 3000 } : undefined
   );
-  
+
   // Set up real-time subscriptions for files and folders when viewing a shared folder
   useEffect(() => {
     if (!currentFolderId) return;
@@ -83,12 +84,12 @@ export default function Shared() {
         (payload) => {
           console.log('Real-time: File change detected in shared folder:', {
             event: payload.eventType,
-            fileId: payload.new?.id || payload.old?.id,
-            fileName: payload.new?.name || payload.old?.name,
-            folderId: payload.new?.folder_id || payload.old?.folder_id,
-            ownerId: payload.new?.owner_id || payload.old?.owner_id,
+            fileId: (payload.new as any)?.id || (payload.old as any)?.id,
+            fileName: (payload.new as any)?.name || (payload.old as any)?.name,
+            folderId: (payload.new as any)?.folder_id || (payload.old as any)?.folder_id,
+            ownerId: (payload.new as any)?.owner_id || (payload.old as any)?.owner_id,
           });
-          
+
           // Force immediate refetch with a small delay to ensure database is updated
           setTimeout(() => {
             console.log('Refetching files after real-time event...');
@@ -114,12 +115,12 @@ export default function Shared() {
         (payload) => {
           console.log('Real-time: Folder change detected in shared folder:', {
             event: payload.eventType,
-            folderId: payload.new?.id || payload.old?.id,
-            folderName: payload.new?.name || payload.old?.name,
-            parentFolderId: payload.new?.parent_folder_id || payload.old?.parent_folder_id,
-            ownerId: payload.new?.owner_id || payload.old?.owner_id,
+            folderId: (payload.new as any)?.id || (payload.old as any)?.id,
+            folderName: (payload.new as any)?.name || (payload.old as any)?.name,
+            parentFolderId: (payload.new as any)?.parent_folder_id || (payload.old as any)?.parent_folder_id,
+            ownerId: (payload.new as any)?.owner_id || (payload.old as any)?.owner_id,
           });
-          
+
           // Force immediate refetch with a small delay to ensure database is updated
           setTimeout(() => {
             console.log('Refetching folders after real-time event...');
@@ -196,12 +197,12 @@ export default function Shared() {
                   resourceId: share.resource_id,
                   error: error?.message || 'Unknown error',
                 });
-                
+
                 // Try to get folder name via RPC function (bypasses RLS)
                 const { data: { user } } = await supabase.auth.getUser();
                 if (user) {
                   try {
-                    const { data: folderName, error: rpcError } = await supabase.rpc(
+                    const { data: folderName, error: rpcError } = await (supabase as any).rpc(
                       'get_shared_folder_name',
                       {
                         folder_id_param: share.resource_id,
@@ -302,9 +303,9 @@ export default function Shared() {
       let folderId: string | null = currentFolderId;
 
       while (folderId) {
-        const { data: folder } = await fileService.getFolderById(folderId);
-        if (folder && folder.data) {
-          path.unshift({ id: folder.data.id, name: folder.data.name });
+        const { data: folder } = await fileService.getFolderById(folderId) as any;
+        if (folder) {
+          path.unshift({ id: folder.id, name: folder.name });
           // Try to get parent folder if it exists
           // Note: For shared folders, parent_folder_id might not be accessible
           // So we'll just show the current folder for now
@@ -327,8 +328,8 @@ export default function Shared() {
         console.log('Opening shared file:', {
           id: item.resource.id,
           name: item.resource.name,
-          storage_key: item.resource.storage_key,
-          mime_type: item.resource.mime_type,
+          storage_key: (item.resource as any).storage_key,
+          mime_type: (item.resource as any).mime_type,
         });
         setSelectedFile(item.resource as File);
         setPreviewOpen(true);
@@ -416,7 +417,7 @@ export default function Shared() {
 
   const handleFileAction = async (action: string, item: File | Folder, type: 'file' | 'folder') => {
     setSelectedItem({ id: item.id, name: item.name, type });
-    
+
     switch (action) {
       case 'rename':
         setRenameDialogOpen(true);
@@ -476,23 +477,35 @@ export default function Shared() {
       : await fileService.toggleFavoriteFolder(item.resource_id, !isFavorite);
 
     if (success) {
-      // Refresh the shared items list
       queryClient.invalidateQueries({ queryKey: ['shared-with-me'] });
     }
   };
 
+  const handleBulkDelete = () => {
+    if (selectedItemIds.size === 0) return;
+    setSelectedItem(null);
+    setDeleteDialogOpen(true);
+  };
+
   const handleDelete = async () => {
+    if (selectedItem) {
+      await performSingleDelete();
+    } else if (selectedItemIds.size > 0) {
+      await confirmBulkDelete();
+    }
+  };
+
+  const performSingleDelete = async () => {
     if (!selectedItem) return;
-    
+
     setIsDeleting(true);
     try {
       const success = selectedItem.type === 'file'
         ? await fileService.deleteFile(selectedItem.id)
         : await fileService.deleteFolder(selectedItem.id);
-      
+
       if (success) {
         toast.success(`${selectedItem.type === 'file' ? 'File' : 'Folder'} deleted`);
-        // Refresh shared items
         queryClient.invalidateQueries({ queryKey: ['shared-with-me'] });
         if (currentFolderId) {
           refresh();
@@ -510,6 +523,45 @@ export default function Shared() {
     }
   };
 
+  const confirmBulkDelete = async () => {
+    if (selectedItemIds.size === 0) return;
+
+    setIsDeleting(true);
+    try {
+      const selectedItems = [
+        ...folders.filter(f => selectedItemIds.has(f.id)).map(f => ({ ...f, type: 'folder' as const })),
+        ...files.filter(f => selectedItemIds.has(f.id)).map(f => ({ ...f, type: 'file' as const }))
+      ];
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const item of selectedItems) {
+        const success = item.type === 'file'
+          ? await fileService.deleteFile(item.id)
+          : await fileService.deleteFolder(item.id);
+
+        if (success) successCount++;
+        else errorCount++;
+      }
+
+      if (successCount > 0) {
+        toast.success(`Deleted ${successCount} item(s)${errorCount > 0 ? ` (${errorCount} failed)` : ''}`);
+        setSelectedItemIds(new Set());
+        queryClient.invalidateQueries({ queryKey: ['shared-with-me'] });
+        if (currentFolderId) refresh();
+      } else if (errorCount > 0) {
+        toast.error(`Failed to delete ${errorCount} item(s)`);
+      }
+    } catch (error) {
+      console.error('Bulk delete error:', error);
+      toast.error('An error occurred during bulk deletion');
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+    }
+  };
+
   const isFavorite = (item: SharedItem): boolean => {
     if (!item.resource) return false;
     return item.resource_type === 'file'
@@ -521,43 +573,84 @@ export default function Shared() {
     <DashboardLayout title="Shared" subtitle="Files and folders shared with you" fullHeight>
       <div className="flex flex-col h-full bg-background">
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-3 border-b bg-background">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border/40 bg-background/80 backdrop-blur-md sticky top-0 z-10">
+          <div className="flex items-center gap-3">
             {currentFolderId && (
-              <Button variant="ghost" size="icon" onClick={handleBack}>
-                <ChevronLeft className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" onClick={handleBack}>
+                <ChevronLeft className="h-5 w-5" />
               </Button>
             )}
-            <div className="flex items-center gap-2">
-              {currentFolderId && (
-                <>
-                  <Button variant="outline" size="sm" onClick={() => setNewFolderDialogOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
+            <h2 className="text-lg font-semibold tracking-tight">Shared</h2>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {currentFolderId && (
+              <>
+                {selectedItemIds.size > 0 && (
+                  <div className="flex items-center gap-2 mr-2 animate-in fade-in slide-in-from-left-2 bg-destructive/10 px-3 py-1.5 rounded-xl border border-destructive/20">
+                    <span className="text-xs font-medium text-destructive">{selectedItemIds.size} selected</span>
+                    <div className="h-4 w-px bg-destructive/20 mx-1" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
+                      onClick={handleBulkDelete}
+                      disabled={isDeleting}
+                    >
+                      <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                      Delete
+                    </Button>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 bg-accent/30 p-1 rounded-xl border border-border/30">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs font-medium hover:bg-background rounded-lg shadow-none"
+                    onClick={() => setNewFolderDialogOpen(true)}
+                  >
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
                     New Folder
                   </Button>
-                  <Button variant="outline" size="sm" onClick={handleUploadClick}>
-                    <Upload className="mr-2 h-4 w-4" />
+                  <div className="h-4 w-px bg-border/40" />
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="h-8 text-xs font-medium shadow-sm rounded-lg"
+                    onClick={handleUploadClick}
+                  >
+                    <Upload className="mr-1.5 h-3.5 w-3.5" />
                     Upload
                   </Button>
-                </>
-              )}
+                </div>
+              </>
+            )}
+
+            <div className="flex items-center bg-accent/30 p-1 rounded-xl border border-border/30">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-8 w-8 rounded-lg transition-all",
+                  viewMode === 'grid' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
+                )}
+                onClick={() => setViewMode('grid')}
+              >
+                <Grid3x3 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-8 w-8 rounded-lg transition-all",
+                  viewMode === 'list' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
+                )}
+                onClick={() => setViewMode('list')}
+              >
+                <List className="h-4 w-4" />
+              </Button>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant={viewMode === 'grid' ? 'default' : 'ghost'}
-              size="icon"
-              onClick={() => setViewMode('grid')}
-            >
-              <Grid3x3 className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'ghost'}
-              size="icon"
-              onClick={() => setViewMode('list')}
-            >
-              <List className="h-4 w-4" />
-            </Button>
           </div>
         </div>
 
@@ -614,7 +707,7 @@ export default function Shared() {
                 onFolderClick={handleFolderClick}
                 onFileClick={handleFileClick}
                 onFileAction={handleFileAction}
-                onSelectionChange={() => {}}
+                onSelectionChange={setSelectedItemIds}
               />
             ) : (
               <FileListView
@@ -623,7 +716,7 @@ export default function Shared() {
                 onFolderClick={handleFolderClick}
                 onFileClick={handleFileClick}
                 onFileAction={handleFileAction}
-                onSelectionChange={() => {}}
+                onSelectionChange={setSelectedItemIds}
               />
             )
           ) : (
@@ -730,9 +823,9 @@ export default function Shared() {
                         <TableCell className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 className="h-7 w-7"
                               >
                                 <MoreVertical className="h-3.5 w-3.5" />
@@ -763,7 +856,7 @@ export default function Shared() {
                                     Move to Hidden
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
-                                  <DropdownMenuItem 
+                                  <DropdownMenuItem
                                     className="text-destructive focus:text-destructive"
                                     onClick={() => handleFileAction('delete', item.resource!, item.resource_type)}
                                   >
@@ -821,8 +914,8 @@ export default function Shared() {
           open={deleteDialogOpen}
           onOpenChange={setDeleteDialogOpen}
           onConfirm={handleDelete}
-          itemCount={1}
-          itemType={selectedItem?.type || 'item'}
+          itemCount={selectedItemIds.size || 1}
+          itemType={selectedItemIds.size > 1 ? 'items' : (selectedItem?.type || 'item')}
           isLoading={isDeleting}
         />
 

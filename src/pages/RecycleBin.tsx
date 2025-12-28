@@ -15,8 +15,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fileService } from '@/services/fileService';
+import { documentService } from '@/services/documentService';
 import { File, Folder } from '@/types/file';
-import { Trash2, RotateCcw, Grid3x3, List, MoreVertical } from 'lucide-react';
+import { Trash2, RotateCcw, Grid3x3, List, MoreVertical, FileText } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { FolderIcon } from '@/components/ui/FolderIcon';
@@ -39,7 +40,7 @@ type ViewMode = 'grid' | 'list';
 export default function RecycleBin() {
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; type: 'file' | 'folder' } | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; type: 'file' | 'folder' | 'document' } | null>(null);
   const [confirmText, setConfirmText] = useState('');
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -55,12 +56,19 @@ export default function RecycleBin() {
     queryFn: () => fileService.getDeletedFolders(),
   });
 
+  const { data: deletedDocuments = [], isLoading: documentsLoading } = useQuery({
+    queryKey: ['deleted-documents'],
+    queryFn: () => documentService.getDeletedDocuments(),
+  });
+
   const refresh = async () => {
     // Invalidate and immediately refetch to get updated data
     await queryClient.invalidateQueries({ queryKey: ['deleted-files'] });
     await queryClient.invalidateQueries({ queryKey: ['deleted-folders'] });
+    await queryClient.invalidateQueries({ queryKey: ['deleted-documents'] });
     await queryClient.refetchQueries({ queryKey: ['deleted-files'] });
     await queryClient.refetchQueries({ queryKey: ['deleted-folders'] });
+    await queryClient.refetchQueries({ queryKey: ['deleted-documents'] });
   };
 
   const handleRestoreFile = async (fileId: string) => {
@@ -91,9 +99,23 @@ export default function RecycleBin() {
     }
   };
 
+  const handleRestoreDocument = async (documentId: string) => {
+    const success = await documentService.restoreDocument(documentId);
+    if (success) {
+      toast.success('Document restored');
+      // Remove from selected items if it was selected
+      setSelectedItemIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(documentId);
+        return newSet;
+      });
+      await refresh();
+    }
+  };
+
   const handlePermanentDelete = async () => {
     if (!itemToDelete) return;
-    
+
     // Validate that user typed the name correctly
     if (confirmText !== itemToDelete.name) {
       toast.error(`${itemToDelete.type === 'file' ? 'File' : 'Folder'} name does not match. Please type the exact name to confirm.`);
@@ -102,10 +124,12 @@ export default function RecycleBin() {
 
     const success = itemToDelete.type === 'file'
       ? await fileService.permanentlyDeleteFile(itemToDelete.id)
-      : await fileService.permanentlyDeleteFolder(itemToDelete.id);
-      
+      : itemToDelete.type === 'folder'
+        ? await fileService.permanentlyDeleteFolder(itemToDelete.id)
+        : await documentService.hardDeleteDocument(itemToDelete.id);
+
     if (success) {
-      toast.success(`${itemToDelete.type === 'file' ? 'File' : 'Folder'} permanently deleted`);
+      toast.success(`${itemToDelete.type.charAt(0).toUpperCase() + itemToDelete.type.slice(1)} permanently deleted`);
       // Remove from selected items if it was selected
       setSelectedItemIds(prev => {
         const newSet = new Set(prev);
@@ -126,12 +150,13 @@ export default function RecycleBin() {
     setConfirmText('');
   };
 
-  const isLoading = filesLoading || foldersLoading;
-  const hasItems = deletedFiles.length > 0 || deletedFolders.length > 0;
+  const isLoading = filesLoading || foldersLoading || documentsLoading;
+  const hasItems = deletedFiles.length > 0 || deletedFolders.length > 0 || deletedDocuments.length > 0;
 
   const allItems = [
     ...deletedFolders.map(f => ({ ...f, type: 'folder' as const })),
-    ...deletedFiles.map(f => ({ ...f, type: 'file' as const }))
+    ...deletedFiles.map(f => ({ ...f, type: 'file' as const })),
+    ...deletedDocuments.map(d => ({ ...d, type: 'document' as const }))
   ].sort((a, b) => {
     const dateA = new Date(a.deleted_at || 0).getTime();
     const dateB = new Date(b.deleted_at || 0).getTime();
@@ -165,11 +190,11 @@ export default function RecycleBin() {
 
   const confirmBulkDelete = async () => {
     if (selectedItemIds.size === 0) return;
-    
+
     setIsDeleting(true);
     try {
       const selectedItems = allItems.filter(item => selectedItemIds.has(item.id));
-      
+
       let successCount = 0;
       let errorCount = 0;
       const errors: string[] = [];
@@ -178,8 +203,10 @@ export default function RecycleBin() {
         try {
           const success = item.type === 'file'
             ? await fileService.permanentlyDeleteFile(item.id)
-            : await fileService.permanentlyDeleteFolder(item.id);
-          
+            : item.type === 'folder'
+              ? await fileService.permanentlyDeleteFolder(item.id)
+              : await documentService.hardDeleteDocument(item.id);
+
           if (success) {
             successCount++;
           } else {
@@ -212,7 +239,7 @@ export default function RecycleBin() {
 
   const handleBulkRestore = async () => {
     if (selectedItemIds.size === 0) return;
-    
+
     const selectedItems = allItems.filter(item => selectedItemIds.has(item.id));
     let successCount = 0;
     let errorCount = 0;
@@ -222,8 +249,10 @@ export default function RecycleBin() {
       try {
         const success = item.type === 'file'
           ? await fileService.restoreFile(item.id)
-          : await fileService.restoreFolder(item.id);
-        
+          : item.type === 'folder'
+            ? await fileService.restoreFolder(item.id)
+            : await documentService.restoreDocument(item.id);
+
         if (success) {
           successCount++;
         } else {
@@ -324,7 +353,7 @@ export default function RecycleBin() {
               </TableHeader>
               <TableBody>
                 {allItems.map((item) => (
-                  <TableRow 
+                  <TableRow
                     key={item.id}
                     className={cn(
                       "cursor-pointer hover:bg-accent/40 border-b border-border/50 transition-colors duration-100 group",
@@ -341,6 +370,8 @@ export default function RecycleBin() {
                       <div className="flex items-center gap-3">
                         {item.type === 'folder' ? (
                           <FolderIcon size={20} className="text-primary shrink-0" />
+                        ) : item.type === 'document' ? (
+                          <FileText size={20} className="text-primary shrink-0" />
                         ) : (
                           <div className="shrink-0">
                             {getFileIconComponent((item as File).mime_type, (item as File).name, 'sm')}
@@ -358,29 +389,31 @@ export default function RecycleBin() {
                     <TableCell className="px-2" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity duration-100"
                           >
                             <MoreVertical className="h-3.5 w-3.5" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem 
-                            onClick={() => 
-                              item.type === 'folder' 
+                          <DropdownMenuItem
+                            onClick={() =>
+                              item.type === 'folder'
                                 ? handleRestoreFolder(item.id)
-                                : handleRestoreFile(item.id)
+                                : item.type === 'document'
+                                  ? handleRestoreDocument(item.id)
+                                  : handleRestoreFile(item.id)
                             }
                           >
                             <RotateCcw className="mr-2 h-4 w-4" />
                             Restore
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem 
+                          <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
-                            onClick={() => handleDeleteClick(item as File | Folder, item.type)}
+                            onClick={() => handleDeleteClick(item as any, item.type as any)}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete Permanently
@@ -402,6 +435,8 @@ export default function RecycleBin() {
                     <div className="mb-2 flex items-center justify-center">
                       {item.type === 'folder' ? (
                         <FolderIcon size={48} className="text-primary" />
+                      ) : item.type === 'document' ? (
+                        <FileText size={48} className="text-primary" />
                       ) : (
                         getFileIconComponentLarge((item as File).mime_type, (item as File).name)
                       )}
@@ -420,29 +455,31 @@ export default function RecycleBin() {
                     <div className="relative w-full">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-8 w-8"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem 
-                            onClick={() => 
-                              item.type === 'folder' 
+                          <DropdownMenuItem
+                            onClick={() =>
+                              item.type === 'folder'
                                 ? handleRestoreFolder(item.id)
-                                : handleRestoreFile(item.id)
+                                : item.type === 'document'
+                                  ? handleRestoreDocument(item.id)
+                                  : handleRestoreFile(item.id)
                             }
                           >
                             <RotateCcw className="mr-2 h-4 w-4" />
                             Restore
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem 
+                          <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
-                            onClick={() => handleDeleteClick(item as File | Folder, item.type)}
+                            onClick={() => handleDeleteClick(item as any, item.type as any)}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete Permanently
@@ -465,28 +502,28 @@ export default function RecycleBin() {
         }}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Permanently Delete {itemToDelete?.type === 'file' ? 'File' : 'Folder'}?</AlertDialogTitle>
+              <AlertDialogTitle>Permanently Delete {itemToDelete?.type === 'file' ? 'File' : itemToDelete?.type === 'folder' ? 'Folder' : 'Document'}?</AlertDialogTitle>
               <AlertDialogDescription>
-                This action cannot be undone. The {itemToDelete?.type === 'file' ? 'file will be permanently deleted from storage' : 'folder and all its contents will be permanently deleted'}.
+                This action cannot be undone. The {itemToDelete?.type === 'file' ? 'file will be permanently deleted from storage' : itemToDelete?.type === 'folder' ? 'folder and all its contents will be permanently deleted' : 'document will be permanently deleted'}.
                 <br /><br />
-                To confirm, please type the {itemToDelete?.type === 'file' ? 'file' : 'folder'} name: <strong>{itemToDelete?.name}</strong>
+                To confirm, please type the {itemToDelete?.type === 'file' ? 'file' : itemToDelete?.type === 'folder' ? 'folder' : 'document'} name: <strong>{itemToDelete?.name}</strong>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="py-4">
               <Label htmlFor="confirm-name" className="text-sm font-medium">
-                {itemToDelete?.type === 'file' ? 'File' : 'Folder'} Name
+                {itemToDelete?.type === 'file' ? 'File' : itemToDelete?.type === 'folder' ? 'Folder' : 'Document'} Name
               </Label>
               <Input
                 id="confirm-name"
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
-                placeholder={`Type the ${itemToDelete?.type === 'file' ? 'file' : 'folder'} name to confirm`}
+                placeholder={`Type the ${itemToDelete?.type === 'file' ? 'file' : itemToDelete?.type === 'folder' ? 'folder' : 'document'} name to confirm`}
                 className="mt-2"
                 autoFocus
               />
               {confirmText && confirmText !== itemToDelete?.name && (
                 <p className="text-sm text-destructive mt-2">
-                  {itemToDelete?.type === 'file' ? 'File' : 'Folder'} name does not match
+                  {itemToDelete?.type === 'file' ? 'File' : itemToDelete?.type === 'folder' ? 'Folder' : 'Document'} name does not match
                 </p>
               )}
             </div>

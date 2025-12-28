@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { cn } from '@/lib/utils';
 import { FileUploadDropzone } from '@/components/file-operations/FileUploadDropzone';
 import { MoveFileDialog } from '@/components/file-operations/MoveFileDialog';
 import { RenameDialog } from '@/components/file-operations/RenameDialog';
@@ -29,9 +30,7 @@ export default function Files() {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(folderParam || null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [breadcrumbs, setBreadcrumbs] = useState<Array<{ id: string | null; name: string }>>([]);
-  const { files, folders, isLoading, refresh } = useFiles(currentFolderId, {
-    refetchInterval: false, // Disable auto-refetch - use real-time subscriptions instead
-  });
+  const { files, folders, isLoading, refresh } = useFiles(currentFolderId);
   const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -81,15 +80,18 @@ export default function Files() {
       let folderId = currentFolderId;
 
       while (folderId && !cancelled) {
+        // Use type casting to handle the Supabase specific response correctly
         const { data: folder } = await supabase
           .from('folders')
           .select('id, name, parent_folder_id')
           .eq('id', folderId)
-          .maybeSingle(); // Use maybeSingle to handle missing folders gracefully
+          .maybeSingle();
 
         if (folder) {
-          path.unshift({ id: folder.id, name: folder.name });
-          folderId = folder.parent_folder_id;
+          // Explicitly cast folder to any to avoid strict type checking issues with maybeSingle
+          const typedFolder = folder as any;
+          path.unshift({ id: typedFolder.id, name: typedFolder.name });
+          folderId = typedFolder.parent_folder_id;
         } else {
           break;
         }
@@ -135,7 +137,7 @@ export default function Files() {
   };
 
   const handleDelete = async (id: string, type: 'file' | 'folder') => {
-    const success = type === 'file' 
+    const success = type === 'file'
       ? await fileService.deleteFile(id)
       : await fileService.deleteFolder(id);
     if (success) {
@@ -157,7 +159,7 @@ export default function Files() {
 
   const handleFileAction = async (action: string, item: FileType | FolderType, type: 'file' | 'folder') => {
     setSelectedItem({ id: item.id, name: item.name, type });
-    
+
     switch (action) {
       case 'share':
         setShareDialogOpen(true);
@@ -214,14 +216,14 @@ export default function Files() {
 
   const confirmBulkDelete = async () => {
     if (selectedItemIds.size === 0) return;
-    
+
     setIsDeleting(true);
     try {
       const selectedItems = [
         ...folders.filter(f => selectedItemIds.has(f.id)).map(f => ({ ...f, type: 'folder' as const })),
         ...files.filter(f => selectedItemIds.has(f.id)).map(f => ({ ...f, type: 'file' as const }))
       ];
-      
+
       let successCount = 0;
       let errorCount = 0;
       const errors: string[] = [];
@@ -231,7 +233,7 @@ export default function Files() {
           const success = item.type === 'file'
             ? await fileService.deleteFile(item.id)
             : await fileService.deleteFolder(item.id);
-          
+
           if (success) {
             successCount++;
           } else {
@@ -271,60 +273,76 @@ export default function Files() {
     <DashboardLayout title="Files" subtitle="Manage your files and folders" fullHeight>
       <div className="flex flex-col h-full bg-background">
         {/* Toolbar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-background">
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border/40 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10 transition-all duration-200">
+          <div className="flex items-center gap-3">
             {currentFolderId && (
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleBack}>
-                <ChevronLeft className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-accent/50" onClick={handleBack}>
+                <ChevronLeft className="h-5 w-5" />
               </Button>
             )}
+            <div className="flex flex-col">
+              <h2 className="text-lg font-semibold tracking-tight">Files</h2>
+              {/* We could potentially move breadcrumbs here or keep them below */}
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-3">
             {selectedItemIds.size > 0 && (
-              <Button 
-                variant="destructive" 
-                size="sm" 
-                className="h-8 text-xs" 
-                onClick={handleBulkDelete}
-                disabled={isDeleting}
-              >
-                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                Delete {selectedItemIds.size}
-              </Button>
+              <div className="flex items-center gap-2 mr-2 animate-fade-in bg-destructive/10 px-3 py-1.5 rounded-xl border border-destructive/20">
+                <span className="text-xs font-medium text-destructive">{selectedItemIds.size} selected</span>
+                <div className="h-4 w-px bg-destructive/20 mx-1" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
+                  onClick={handleBulkDelete}
+                  disabled={isDeleting}
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  Delete
+                </Button>
+              </div>
             )}
-            <div className="flex items-center gap-1.5">
-              <Button 
-                variant="default" 
-                size="sm" 
-                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" 
+            <div className="flex items-center gap-2 bg-accent/30 p-1 rounded-xl border border-border/30">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs font-medium hover:bg-background shadow-none transition-all rounded-lg"
                 onClick={() => setNewFolderDialogOpen(true)}
               >
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 New Folder
               </Button>
-              <Button 
-                variant="default" 
-                size="sm" 
-                className="h-8 text-xs bg-primary hover:bg-primary/90 text-white" 
+              <div className="h-4 w-px bg-border/40" />
+              <Button
+                variant="default"
+                size="sm"
+                className="h-8 text-xs font-medium shadow-sm rounded-lg"
                 onClick={handleUploadClick}
               >
                 <Upload className="mr-1.5 h-3.5 w-3.5" />
                 Upload
               </Button>
             </div>
-            <div className="flex items-center gap-0.5 ml-2">
+
+            <div className="flex items-center bg-accent/30 p-1 rounded-xl border border-border/30">
               <Button
-                variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className={cn(
+                  "h-8 w-8 rounded-lg transition-all",
+                  viewMode === 'grid' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
                 onClick={() => setViewMode('grid')}
               >
                 <Grid3x3 className="h-4 w-4" />
               </Button>
               <Button
-                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className={cn(
+                  "h-8 w-8 rounded-lg transition-all",
+                  viewMode === 'list' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
                 onClick={() => setViewMode('list')}
               >
                 <List className="h-4 w-4" />
@@ -361,31 +379,31 @@ export default function Files() {
                 Upload files or create a folder to get started
               </p>
             </div>
-              ) : viewMode === 'grid' ? (
-                <FileGridView
-                  folders={folders}
-                  files={files}
-                  onFolderClick={handleFolderClick}
-                  onFileClick={(file) => {
-                    setSelectedFile(file);
-                    setPreviewOpen(true);
-                  }}
-                  onFileAction={handleFileAction}
-                  onSelectionChange={setSelectedItemIds}
-                />
-              ) : (
-                <FileListView
-                  folders={folders}
-                  files={files}
-                  onFolderClick={handleFolderClick}
-                  onFileClick={(file) => {
-                    setSelectedFile(file);
-                    setPreviewOpen(true);
-                  }}
-                  onFileAction={handleFileAction}
-                  onSelectionChange={setSelectedItemIds}
-                />
-              )}
+          ) : viewMode === 'grid' ? (
+            <FileGridView
+              folders={folders}
+              files={files}
+              onFolderClick={handleFolderClick}
+              onFileClick={(file) => {
+                setSelectedFile(file);
+                setPreviewOpen(true);
+              }}
+              onFileAction={handleFileAction}
+              onSelectionChange={setSelectedItemIds}
+            />
+          ) : (
+            <FileListView
+              folders={folders}
+              files={files}
+              onFolderClick={handleFolderClick}
+              onFileClick={(file) => {
+                setSelectedFile(file);
+                setPreviewOpen(true);
+              }}
+              onFileAction={handleFileAction}
+              onSelectionChange={setSelectedItemIds}
+            />
+          )}
         </div>
 
         <DeleteConfirmationDialog

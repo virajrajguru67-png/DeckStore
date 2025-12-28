@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { formatFileSize } from '@/lib/fileUtils';
 import { FileListView } from '@/components/file-explorer/FileListView';
 import { toast } from 'sonner';
+import { documentService } from '@/services/documentService';
 
 export default function Favorites() {
   const [selectedFile, setSelectedFile] = useState<FileType | null>(null);
@@ -31,17 +32,34 @@ export default function Favorites() {
     queryFn: () => fileService.getFavoriteFolders(),
   });
 
-  const isLoading = filesLoading || foldersLoading;
+  const { data: favoriteDocuments = [], isLoading: documentsLoading } = useQuery({
+    queryKey: ['favorite-documents'],
+    queryFn: () => documentService.getFavoriteDocuments(),
+  });
+
+  const isLoading = filesLoading || foldersLoading || documentsLoading;
+
+  // Map documents to File-like objects for the view
+  const mappedDocuments = favoriteDocuments.map(doc => ({
+    ...doc,
+    mime_type: 'application/vnd.deckstore.document',
+    size: 0, // Documents are JSON in DB, size isn't easily measured in bytes here
+    path: '',
+    storage_key: '',
+    type: 'document' as const
+  }));
+
   const allFavorites = [
     ...favoriteFolders.map(f => ({ ...f, type: 'folder' as const })),
-    ...favoriteFiles.map(f => ({ ...f, type: 'file' as const }))
+    ...favoriteFiles.map(f => ({ ...f, type: 'file' as const })),
+    ...mappedDocuments
   ];
 
   const handleToggleFavorite = async (item: FileType | FolderType, type: 'file' | 'folder') => {
-    const currentFavorite = type === 'file' 
+    const currentFavorite = type === 'file'
       ? (item as FileType).metadata?.is_favorite === true
       : (item as any).metadata?.is_favorite === true;
-    
+
     let success = false;
     if (type === 'file') {
       success = await fileService.toggleFavoriteFile(item.id, !currentFavorite);
@@ -52,6 +70,7 @@ export default function Favorites() {
     if (success) {
       queryClient.invalidateQueries({ queryKey: ['favorite-files'] });
       queryClient.invalidateQueries({ queryKey: ['favorite-folders'] });
+      queryClient.invalidateQueries({ queryKey: ['favorite-documents'] });
     }
   };
 
@@ -62,14 +81,14 @@ export default function Favorites() {
 
   const confirmBulkDelete = async () => {
     if (selectedItemIds.size === 0) return;
-    
+
     setIsDeleting(true);
     try {
       const selectedItems = [
         ...favoriteFolders.filter(f => selectedItemIds.has(f.id)).map(f => ({ ...f, type: 'folder' as const })),
         ...favoriteFiles.filter(f => selectedItemIds.has(f.id)).map(f => ({ ...f, type: 'file' as const }))
       ];
-      
+
       let successCount = 0;
       let errorCount = 0;
       const errors: string[] = [];
@@ -79,7 +98,7 @@ export default function Favorites() {
           const success = item.type === 'file'
             ? await fileService.deleteFile(item.id)
             : await fileService.deleteFolder(item.id);
-          
+
           if (success) {
             successCount++;
           } else {
@@ -99,8 +118,10 @@ export default function Favorites() {
         setSelectedItemIds(new Set());
         await queryClient.invalidateQueries({ queryKey: ['favorite-files'] });
         await queryClient.invalidateQueries({ queryKey: ['favorite-folders'] });
+        await queryClient.invalidateQueries({ queryKey: ['favorite-documents'] });
         await queryClient.refetchQueries({ queryKey: ['favorite-files'] });
         await queryClient.refetchQueries({ queryKey: ['favorite-folders'] });
+        await queryClient.refetchQueries({ queryKey: ['favorite-documents'] });
       } else if (errorCount > 0) {
         toast.error(`Failed to delete ${errorCount} item(s). ${errors.slice(0, 3).join(', ')}${errors.length > 3 ? '...' : ''}`);
       }
@@ -113,7 +134,7 @@ export default function Favorites() {
     }
   };
 
-  const handleFileAction = (action: string, item: FileType | FolderType, type: 'file' | 'folder') => {
+  const handleFileAction = (action: string, item: any, type: string) => {
     if (action === 'delete') {
       const confirm = window.confirm(`Are you sure you want to delete ${item.name}?`);
       if (confirm) {
@@ -122,10 +143,15 @@ export default function Favorites() {
             await queryClient.invalidateQueries({ queryKey: ['favorite-files'] });
             await queryClient.refetchQueries({ queryKey: ['favorite-files'] });
           });
-        } else {
+        } else if (type === 'folder') {
           fileService.deleteFolder(item.id).then(async () => {
             await queryClient.invalidateQueries({ queryKey: ['favorite-folders'] });
             await queryClient.refetchQueries({ queryKey: ['favorite-folders'] });
+          });
+        } else if (type === 'document') {
+          documentService.deleteDocument(item.id).then(async () => {
+            await queryClient.invalidateQueries({ queryKey: ['favorite-documents'] });
+            await queryClient.refetchQueries({ queryKey: ['favorite-documents'] });
           });
         }
       }
@@ -137,9 +163,9 @@ export default function Favorites() {
       <div className="space-y-6">
         <div className="flex items-center justify-end">
           {selectedItemIds.size > 0 && (
-            <Button 
-              variant="destructive" 
-              size="sm" 
+            <Button
+              variant="destructive"
+              size="sm"
               onClick={handleBulkDelete}
               disabled={isDeleting}
             >
@@ -162,11 +188,16 @@ export default function Favorites() {
           <div className="h-[calc(100vh-300px)]">
             <FileListView
               folders={favoriteFolders}
-              files={favoriteFiles}
-              onFolderClick={() => {}}
+              files={[...favoriteFiles, ...mappedDocuments] as any}
+              onFolderClick={() => { }}
               onFileClick={(file) => {
-                setSelectedFile(file);
-                setPreviewOpen(true);
+                if ((file as any).type === 'document') {
+                  // Navigate to documents page or open editor if we had routing
+                  toast.info('Opening document...', { description: file.name });
+                } else {
+                  setSelectedFile(file);
+                  setPreviewOpen(true);
+                }
               }}
               onFileAction={handleFileAction}
               onSelectionChange={setSelectedItemIds}
