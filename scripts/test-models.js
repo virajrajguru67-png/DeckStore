@@ -1,20 +1,34 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { fetch } from "undici"; // or native fetch if Node 18+
 
-const API_KEY = "AIzaSyBZ4VHbqF-Vx_YD6dbcTzjA5YdQaz0axq0";
+const API_KEY = process.env.VITE_GROQ_API_KEY || "";
 
-console.log("Starting model check...");
-
-const genAI = new GoogleGenerativeAI(API_KEY);
+console.log("Starting Groq model check...");
 
 async function check() {
-    console.log("Checking gemini-1.5-flash...");
+    console.log("Checking llama-3.3-70b-versatile...");
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const result = await model.generateContent("Hi");
-        console.log("Response:", result.response.text());
-        console.log("gemini-1.5-flash IS WORKING");
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${API_KEY}`
+            },
+            body: JSON.stringify({
+                model: "llama-3.3-70b-versatile",
+                messages: [{ role: "user", content: "Hi" }]
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error?.message || response.statusText);
+        }
+
+        console.log("Response:", data.choices[0].message.content);
+        console.log("llama3-70b-8192 IS WORKING");
     } catch (error) {
-        console.error("gemini-1.5-flash FAILED:", error.message);
+        console.error("Groq Check FAILED:", error.message);
     }
 }
 

@@ -42,7 +42,7 @@ export default function Dashboard() {
         // Get all files (not just root files) sorted by updated_at
         const { data: allFiles, error: filesError } = await supabase
           .from('files')
-          .select('*')
+          .select('*, folders(deleted_at)')
           .is('deleted_at', null)
           .eq('owner_id', user.id)
           .order('updated_at', { ascending: false })
@@ -65,8 +65,14 @@ export default function Dashboard() {
           console.error('Error fetching recent folders:', foldersError);
         }
 
-        // Filter out hidden files and folders
-        const files = ((allFiles as File[]) || []).filter(file => !file.metadata?.is_hidden);
+        // Filter out hidden files and files in deleted folders
+        const files = ((allFiles as any[]) || []).filter(file => {
+          const isHidden = file.metadata?.is_hidden;
+          // Check if parent folder is deleted (if it exists)
+          const isParentDeleted = file.folders && file.folders.deleted_at;
+          return !isHidden && !isParentDeleted;
+        });
+
         const folders = ((allFolders as Folder[]) || []).filter(folder => !(folder as any).metadata?.is_hidden);
 
         // Combine and sort by updated_at (most recent first)

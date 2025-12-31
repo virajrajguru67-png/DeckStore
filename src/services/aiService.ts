@@ -1,103 +1,30 @@
-let activeModelName: string | null = null;
-let activeVersion: string = "v1beta";
 
-// Helper to discover the right model dynamically
-async function discoverModel(apiKey: string) {
-    if (activeModelName) return;
 
-    // Attempt to list models to see what this key has access to
-    try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        const data = await response.json();
-
-        if (!response.ok) {
-            console.warn("List Models failed:", data);
-            // Fallback default if list fails (e.g. permission issue)
-            activeModelName = "models/gemini-1.5-flash";
-            return;
-        }
-
-        const models = data.models || [];
-        // Prioritize models in this order (Strict handling)
-        const priorities = [
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-pro",
-            "gemini-pro",
-            "gemini-1.0-pro"
-        ];
-
-        // Find the best match that supports 'generateContent'
-        for (const p of priorities) {
-            const found = models.find((m: any) =>
-                (m.name === `models/${p}` || m.name === p) &&
-                m.supportedGenerationMethods?.includes("generateContent")
-            );
-            if (found) {
-                activeModelName = found.name;
-                console.log(`[AI Service] Auto-discovered model: ${activeModelName}`);
-                return;
-            }
-        }
-
-        // If no preferred match, take ANY generateContent model (excluding vision-only if possible)
-        const fallback = models.find((m: any) =>
-            m.supportedGenerationMethods?.includes("generateContent") &&
-            !m.name.includes("vision")
-        );
-
-        if (fallback) {
-            activeModelName = fallback.name;
-            console.log(`[AI Service] Fallback model: ${activeModelName}`);
-            return;
-        }
-
-    } catch (e) {
-        console.error("Model Discovery Error:", e);
-    }
-
-    // Ultimate fallback
-    activeModelName = "models/gemini-1.5-flash";
-}
-
-async function callGeminiAPI(prompt: string, apiKey: string) {
-    // Ensure we have a model
-    if (!activeModelName) await discoverModel(apiKey);
-
-    const url = `https://generativelanguage.googleapis.com/${activeVersion}/${activeModelName}:generateContent?key=${apiKey}`;
-
+async function callGroqAPI(prompt: string, apiKey: string): Promise<string> {
+    const url = "https://api.groq.com/openai/v1/chat/completions";
     const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.7,
+        }),
     });
 
     const data = await response.json();
-
     if (!response.ok) {
         const msg = data.error?.message || response.statusText;
-        console.error(`Gemini API Error with ${activeModelName}:`, msg);
-
-        // Handle Quota (429) or Not Found (404) or Bad Request (400 - sometimes model specific)
-        if (response.status === 404 || response.status === 429 || response.status === 400 || msg.includes("quota")) {
-            console.warn("Invalid model or quota exceeded. Resetting active model to try discovery again/fallback.");
-            // If we were using a discovered model, clear it so next call tries something else or defaults
-            if (activeModelName) {
-                activeModelName = null;
-                // Note: We won't endlessly retry recursively here to avoid hanging the UI, 
-                // but clearing it ensures the NEXT user attempt gets a fresh chance.
-                throw new Error(`Quota/Model Error (${activeModelName}). Please try sending again in a moment.`);
-            }
-        }
-        throw new Error(`Gemini Error: ${msg}`);
+        console.error(`Groq API Error:`, msg);
+        throw new Error(`Groq Error: ${msg}`);
     }
-
-    if (!data.candidates || data.candidates.length === 0) {
-        // Safety block or empty
-        return "I couldn't generate a response (Safety Filter triggered).";
+    if (!data.choices || data.choices.length === 0) {
+        return "I couldn't generate a response (no choices returned).";
     }
-
-    return data.candidates[0].content.parts[0].text;
+    return data.choices[0].message.content;
 }
 
 export const aiService = {
@@ -125,7 +52,7 @@ Answer the user's question based on the document. Be brief, professional, and he
 Assistant:
 `;
 
-        return await callGeminiAPI(fullPrompt, apiKey);
+        return await callGroqAPI(fullPrompt, apiKey);
     },
 
     async generateSummary(apiKey: string, documentTitle: string, documentContent: string): Promise<string> {
@@ -134,6 +61,6 @@ Summarize the document "${documentTitle}" in 3 bullet points.
 --- CONTENT ---
 ${documentContent}
 `;
-        return await callGeminiAPI(prompt, apiKey);
+        return await callGroqAPI(prompt, apiKey);
     }
 };

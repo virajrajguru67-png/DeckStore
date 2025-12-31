@@ -82,11 +82,11 @@ export default function DocumentEdit() {
         setIsSummarizing(true);
         try {
             let generatedSummary = "";
-            const DEMO_KEY = "AIzaSyCRgaefXYQSv0TIAtRfZQI2-Mx_BPjOQQ4";
+            const API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 
-            if (aiService.isConfigured()) {
-                // Use Gemini API
-                generatedSummary = await aiService.generateSummary(DEMO_KEY, title, content);
+            if (aiService.isConfigured() && API_KEY) {
+                // Use Groq API
+                generatedSummary = await aiService.generateSummary(API_KEY, title, content);
             } else {
                 // Mock logic as before (Fallback)
                 await new Promise(resolve => setTimeout(resolve, 2000));

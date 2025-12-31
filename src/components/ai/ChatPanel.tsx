@@ -23,8 +23,8 @@ export function ChatPanel({ documentTitle, documentContent }: ChatPanelProps) {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const isCloudAI = true; // Hardcoded as we are providing a key manually
-    const DEMO_KEY = "AIzaSyCRgaefXYQSv0TIAtRfZQI2-Mx_BPjOQQ4";
+    const API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
+    const isCloudAI = !!API_KEY;
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -44,9 +44,9 @@ export function ChatPanel({ documentTitle, documentContent }: ChatPanelProps) {
             let response = "";
 
             if (isCloudAI) {
-                // Use Gemini API with manual key
+                // Use Groq API
                 response = await aiService.generateChatResponse(
-                    DEMO_KEY,
+                    API_KEY,
                     documentTitle,
                     documentContent || "",
                     messages.filter(m => m.role !== 'assistant' || !m.content.startsWith("Hi!")),
@@ -120,7 +120,7 @@ export function ChatPanel({ documentTitle, documentContent }: ChatPanelProps) {
                     } else {
                         response = `I analyzed the notes but couldn't find a specific sentence matching your keywords. The document talks about: ${sentences[0]?.substring(0, 80)}...`;
                     }
-                } else if (query.match(/which ai|what model|who are you|gpt|claude|gemini/i)) {
+                } else if (query.match(/which ai|what model|who are you|gpt|claude|gemini|groq/i)) {
                     response = "I am DeckStore Intelligence, a custom-built local analysis engine designed specifically to understand your documents securely. I don't send your data to external public models.";
                 } else if (query.includes('help')) {
                     response = "I can help you understand specific parts of these notes, summarize the text, or clarify technical terms you've written in the deck.";
@@ -144,7 +144,7 @@ export function ChatPanel({ documentTitle, documentContent }: ChatPanelProps) {
                 <div className="flex items-center gap-2">
                     {isCloudAI ? <BrainCircuit className="h-3.5 w-3.5 text-indigo-500" /> : <Sparkles className="h-3.5 w-3.5 text-primary" />}
                     <span className="text-xs font-semibold">
-                        {isCloudAI ? "DeckStore AI (Google Gemini)" : "DeckStore Local Intelligence"}
+                        {isCloudAI ? "DeckStore AI (Groq Llama 3.3)" : "DeckStore Local Intelligence"}
                     </span>
                 </div>
                 <div className={cn(
@@ -199,7 +199,7 @@ export function ChatPanel({ documentTitle, documentContent }: ChatPanelProps) {
                     <Input
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        placeholder={isCloudAI ? "Ask Gemini anything about this document..." : "Ask locally about this deck..."}
+                        placeholder={isCloudAI ? "Ask Groq anything about this document..." : "Ask locally about this deck..."}
                         className="rounded-xl bg-background border-border/60 pr-10 text-xs h-10 shadow-sm focus-visible:ring-primary/20 transition-all"
                         disabled={isLoading}
                     />
@@ -216,7 +216,7 @@ export function ChatPanel({ documentTitle, documentContent }: ChatPanelProps) {
                     {isCloudAI ? (
                         <>
                             <Zap className="h-3 w-3 text-indigo-500" />
-                            <span>Powered by Google Gemini Pro</span>
+                            <span>Powered by Groq Llama 3.3</span>
                         </>
                     ) : (
                         <>
