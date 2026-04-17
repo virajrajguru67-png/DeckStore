@@ -4,26 +4,26 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from 'next-themes';
 import { useState, useEffect } from 'react';
 import {
-  LayoutDashboard,
-  FolderOpen,
-  Share2,
-  Star,
-  Trash2,
-  Settings,
-  Users,
-  HardDrive,
-  FileText,
-  Boxes,
-  Lock,
-  FileEdit,
   ChevronLeft,
   ChevronRight,
   Sun,
   Moon,
   Monitor,
-  Layers,
-  BarChart3
 } from 'lucide-react';
+import { DashboardIcon } from '@/components/ui/sidebar-icons/DashboardIcon';
+import { FolderIcon } from '@/components/ui/sidebar-icons/FolderIcon';
+import { DocumentsIcon } from '@/components/ui/sidebar-icons/DocumentsIcon';
+import { AnalyticsIcon } from '@/components/ui/sidebar-icons/AnalyticsIcon';
+import { SharedIcon } from '@/components/ui/sidebar-icons/SharedIcon';
+import { FavoritesIcon } from '@/components/ui/sidebar-icons/FavoritesIcon';
+import { HiddenIcon } from '@/components/ui/sidebar-icons/HiddenIcon';
+import { RecycleBinIcon } from '@/components/ui/sidebar-icons/RecycleBinIcon';
+import { UsersIcon } from '@/components/ui/sidebar-icons/UsersIcon';
+import { StorageIcon } from '@/components/ui/sidebar-icons/StorageIcon';
+import { SettingsIcon } from '@/components/ui/sidebar-icons/SettingsIcon';
+import { AuditLogsIcon } from '@/components/ui/sidebar-icons/AuditLogsIcon';
+
+
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -49,22 +49,26 @@ interface NavItem {
 }
 
 const primaryItems: NavItem[] = [
-  { label: 'Dashboard', href: '/', icon: <LayoutDashboard className="h-4 w-4" />, color: "text-sky-500" },
-  { label: 'Files', href: '/files', icon: <FolderOpen className="h-4 w-4" />, color: "text-amber-500" },
-  { label: 'Documents', href: '/documents', icon: <FileEdit className="h-4 w-4" />, color: "text-emerald-500" },
-  { label: 'Analytics', href: '/analytics', icon: <BarChart3 className="h-4 w-4" />, color: "text-rose-500" },
-  { label: 'Shared', href: '/shared', icon: <Share2 className="h-4 w-4" />, color: "text-violet-500" },
-  { label: 'Favorites', href: '/favorites', icon: <Star className="h-4 w-4" />, color: "text-orange-400" },
-  { label: 'Hidden', href: '/hidden', icon: <Lock className="h-4 w-4" />, color: "text-slate-400" },
-  { label: 'Recycle Bin', href: '/trash', icon: <Trash2 className="h-4 w-4" />, color: "text-red-500" },
+  { label: 'Dashboard', href: '/', icon: <DashboardIcon size={18} />, color: "text-sky-500" },
+  { label: 'Files', href: '/files', icon: <FolderIcon size={18} />, color: "text-amber-500" },
+  { label: 'Documents', href: '/documents', icon: <DocumentsIcon size={18} />, color: "text-emerald-500" },
+  { label: 'Analytics', href: '/analytics', icon: <AnalyticsIcon size={18} />, color: "text-rose-500" },
+  { label: 'Shared', href: '/shared', icon: <SharedIcon size={18} />, color: "text-violet-500" },
+  { label: 'Favorites', href: '/favorites', icon: <FavoritesIcon size={18} />, color: "text-orange-400" },
+  { label: 'Hidden', href: '/hidden', icon: <HiddenIcon size={18} />, color: "text-slate-400" },
+  { label: 'Recycle Bin', href: '/trash', icon: <RecycleBinIcon size={18} />, color: "text-red-500" },
+  { label: 'Settings', href: '/settings', icon: <SettingsIcon size={18} />, color: "text-slate-400" },
 ];
 
+
+
 const adminItems: NavItem[] = [
-  { label: 'Users', href: '/admin/users', icon: <Users className="h-4 w-4" />, roles: ['admin', 'owner'], color: "text-blue-500" },
-  { label: 'Storage', href: '/admin/storage', icon: <HardDrive className="h-4 w-4" />, roles: ['admin', 'owner'], color: "text-cyan-500" },
-  { label: 'Settings', href: '/admin/settings', icon: <Settings className="h-4 w-4" />, roles: ['admin', 'owner'], color: "text-zinc-500" },
-  { label: 'Audit Logs', href: '/admin/audit', icon: <FileText className="h-4 w-4" />, roles: ['admin', 'owner'], color: "text-indigo-500" },
+  { label: 'Users', href: '/admin/users', icon: <UsersIcon size={18} />, roles: ['admin', 'owner'], color: "text-blue-500" },
+  { label: 'Storage', href: '/admin/storage', icon: <StorageIcon size={18} />, roles: ['admin', 'owner'], color: "text-cyan-500" },
+  { label: 'Audit Logs', href: '/admin/audit', icon: <AuditLogsIcon size={18} />, roles: ['admin', 'owner'], color: "text-indigo-500" },
 ];
+
+
 
 export function Sidebar() {
   const location = useLocation();
@@ -124,8 +128,8 @@ export function Sidebar() {
         "flex items-center h-14 border-b border-sidebar-border/50 px-3",
         isCollapsed ? "justify-center" : "justify-start gap-3"
       )}>
-        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 shadow-md shadow-indigo-500/20 shrink-0">
-          <Layers className="h-5 w-5 text-white" />
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-sm border border-slate-200 shrink-0 overflow-hidden">
+          <img src="/favicon.svg" alt="DeckStore" className="h-5 w-5 object-contain" />
         </div>
         {!isCollapsed && (
           <span className="font-bold text-base tracking-tight text-foreground">

@@ -9,8 +9,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { fileService } from '@/services/fileService';
-import { Folder } from '@/types/file';
-import { supabase } from '@/integrations/supabase/client';
 import { Folder as FolderIcon, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

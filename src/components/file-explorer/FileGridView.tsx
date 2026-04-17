@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { File as FileType, Folder as FolderType } from '@/types/file';
 import { MoreVertical, Star, ExternalLink, Share2, Pencil, Copy, FolderOpen, Trash2, Lock } from 'lucide-react';
 import { getFileIconComponentLarge } from '@/lib/fileUtils';
-import { FolderIcon } from '@/components/ui/FolderIcon';
+import { FolderIcon } from '@/components/ui/sidebar-icons/FolderIcon';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {

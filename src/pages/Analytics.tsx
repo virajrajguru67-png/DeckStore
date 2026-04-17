@@ -6,7 +6,6 @@ import {
     LineChart, Line, AreaChart, Area, PieChart, Pie, Cell
 } from 'recharts';
 import { Eye, Clock, UserCheck, TrendingUp, Filter } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 
 const MOCK_PAGE_DATA = [

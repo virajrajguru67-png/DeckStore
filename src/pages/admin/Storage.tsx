@@ -1,32 +1,27 @@
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
+import { apiService } from '@/services/apiService';
 
 export default function Storage() {
   const { data: storageData, isLoading } = useQuery({
     queryKey: ['admin-storage'],
     queryFn: async () => {
-      const { data: quotas } = await supabase
-        .from('storage_quotas')
-        .select(`
-          *,
-          profiles:user_id (
-            id,
-            full_name,
-            email
-          )
-        `);
+      try {
+        const quotas = await apiService.get('/storage/all-quotas');
+        const totalUsed = quotas?.reduce((sum: number, q: any) => sum + q.used_bytes, 0) || 0;
+        const totalQuota = quotas?.reduce((sum: number, q: any) => sum + q.total_quota_bytes, 0) || 0;
 
-      const totalUsed = quotas?.reduce((sum, q) => sum + q.used_bytes, 0) || 0;
-      const totalQuota = quotas?.reduce((sum, q) => sum + q.total_quota_bytes, 0) || 0;
-
-      return {
-        quotas: quotas || [],
-        totalUsed,
-        totalQuota,
-      };
+        return {
+          quotas: quotas || [],
+          totalUsed,
+          totalQuota,
+        };
+      } catch (err) {
+        console.error('Failed to fetch storage quotas:', err);
+        return { quotas: [], totalUsed: 0, totalQuota: 0 };
+      }
     },
   });
 
@@ -56,7 +51,7 @@ export default function Storage() {
               {storageData && (
                 <>
                   <Progress
-                    value={(storageData.totalUsed / storageData.totalQuota) * 100}
+                    value={(storageData.totalUsed / storageData.totalQuota) * 100 || 0}
                     className="mb-2"
                   />
                   <p className="text-sm text-muted-foreground">
@@ -70,7 +65,7 @@ export default function Storage() {
           <Card>
             <CardHeader>
               <CardTitle>Users</CardTitle>
-              <CardDescription>Total active users</CardDescription>
+              <CardDescription>Total active users with quotas</CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">{storageData?.quotas.length || 0}</p>
@@ -89,12 +84,12 @@ export default function Storage() {
             ) : (
               <div className="space-y-4">
                 {storageData?.quotas.map((quota: any) => {
-                  const percentage = (quota.used_bytes / quota.total_quota_bytes) * 100;
+                  const percentage = (quota.used_bytes / quota.total_quota_bytes) * 100 || 0;
                   return (
                     <div key={quota.id} className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="font-medium">
-                          {quota.profiles?.full_name || quota.user_id}
+                          {quota.full_name || quota.email || quota.user_id}
                         </span>
                         <span className="text-muted-foreground">
                           {formatBytes(quota.used_bytes)} / {formatBytes(quota.total_quota_bytes)}
@@ -112,5 +107,3 @@ export default function Storage() {
     </DashboardLayout>
   );
 }
-
-

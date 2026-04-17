@@ -5,7 +5,6 @@ import { fileService } from '@/services/fileService';
 import { PreviewModal } from '@/components/preview/PreviewModal';
 import { File as FileType, Folder as FolderType } from '@/types/file';
 import { Share } from '@/services/shareService';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +16,7 @@ import { format } from 'date-fns';
 import { ChatPanel } from '@/components/ai/ChatPanel';
 import { MessageSquare, X as CloseIcon, Sparkles } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { apiService } from '@/services/apiService';
 
 export default function SharedLink() {
   const { shareToken } = useParams<{ shareToken: string }>();
@@ -81,61 +81,32 @@ export default function SharedLink() {
 
       // Load the actual file or folder
       if (shareData.resource_type === 'file') {
-        const files = await fileService.getFiles(null);
-        const foundFile = files.find(f => f.id === shareData.resource_id);
-        if (foundFile) {
-          setFile(foundFile);
-        } else {
-          // Try to fetch directly from database
-          const { data } = await supabase
-            .from('files')
-            .select('*')
-            .eq('id', shareData.resource_id)
-            .single();
-          if (data) {
-            setFile(data as any as FileType);
-          }
+        const { data: fileData } = await fileService.getFileById(shareData.resource_id);
+        if (fileData) {
+          setFile(fileData);
         }
       } else {
         // Load folder and its contents
-        const folders = await fileService.getFolders(null);
-        const foundFolder = folders.find(f => f.id === shareData.resource_id);
-        if (foundFolder) {
-          setFolder(foundFolder);
-          // Load folder contents
-          const folderFiles = await fileService.getFiles(foundFolder.id);
-          const folderFolders = await fileService.getFolders(foundFolder.id);
-          setFolderFiles(folderFiles);
-          setFolderFolders(folderFolders);
-        } else {
-          // Try to fetch directly from database
-          const { data } = await supabase
-            .from('folders')
-            .select('*')
-            .eq('id', shareData.resource_id)
-            .single();
-          if (data) {
-            setFolder(data as any as FolderType);
-            const folderFiles = await fileService.getFiles((data as any).id);
-            const folderFolders = await fileService.getFolders((data as any).id);
-            setFolderFiles(folderFiles);
-            setFolderFolders(folderFolders);
-          }
+        const { data: folderData } = await fileService.getFolderById(shareData.resource_id);
+        if (folderData) {
+          setFolder(folderData);
+          const contents = await fileService.getFolderContents(shareData.resource_id);
+          setFolderFiles(contents.files);
+          setFolderFolders(contents.folders);
         }
       }
 
-      // Fetch sharer's branding
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('custom_branding_logo_url, custom_branding_color')
-        .eq('id', shareData.shared_by)
-        .single();
-
-      if (profile) {
-        setBranding({
-          logo: (profile as any).custom_branding_logo_url,
-          color: (profile as any).custom_branding_color || '#0f172a'
-        });
+      // Fetch sharer's profile for branding (via apiService)
+      try {
+        const profile = await apiService.get(`/profiles/${shareData.shared_by}`);
+        if (profile) {
+          setBranding({
+            logo: profile.custom_branding_logo_url,
+            color: profile.custom_branding_color || '#0f172a'
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load profile branding');
       }
     } catch (error) {
       console.error('Error loading share:', error);
@@ -160,24 +131,9 @@ export default function SharedLink() {
     }
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase.storage
-        .from('files')
-        .createSignedUrl(file.storage_key, 3600);
-
-      if (error || !data) {
-        toast.error('Failed to generate download link');
-        return;
-      }
-
-      // Create a temporary link and trigger download
-      const link = document.createElement('a');
-      link.href = data.signedUrl;
-      link.download = file.name;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
+      // Local API download
+      const downloadUrl = `${import.meta.env.VITE_API_URL}/files/${file.id}/download`;
+      window.open(downloadUrl, '_blank');
       toast.success('Download started');
     } catch (error) {
       console.error('Error downloading file:', error);
@@ -306,7 +262,7 @@ export default function SharedLink() {
                 <div className="flex-1 min-w-0">
                   <h2 className="text-xl font-semibold truncate">{file.name}</h2>
                   <p className="text-sm text-muted-foreground">
-                    {formatFileSize(file.size)} • {format(new Date(file.updated_at), 'MMM d, yyyy')}
+                    {formatFileSize(file.size)} • {file.updated_at ? format(new Date(file.updated_at), 'MMM d, yyyy') : ''}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -324,7 +280,6 @@ export default function SharedLink() {
           </Card>
         )}
 
-        {/* ... folder view logic ... */}
         {folder && (
           <Card className="border-primary/10">
             <CardHeader className="bg-accent/5 rounded-t-xl">
@@ -384,7 +339,6 @@ export default function SharedLink() {
           file={file}
         />
 
-        {/* AI Chat Toggle & Panel */}
         {file && (
           <>
             <motion.div
@@ -431,4 +385,3 @@ export default function SharedLink() {
     </div>
   );
 }
-

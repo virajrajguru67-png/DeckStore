@@ -11,17 +11,22 @@ import { AlertTriangle, Clock, File as FileIcon, Folder as FolderIcon, Share2 } 
 import { FileListView } from '@/components/file-explorer/FileListView';
 import { File, Folder } from '@/types/file';
 import { useState } from 'react';
+import { LocalSearchBar } from '@/components/ui/LocalSearchBar';
 import { PreviewModal } from '@/components/preview/PreviewModal';
-import { formatDistanceToNow } from 'date-fns';
-import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+
+
+
 import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { quota, formatBytes, isLoading: quotaLoading } = useStorageQuota();
-  const { files, folders } = useFiles(null);
+  const { files: rootFiles, folders: rootFolders } = useFiles(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
 
   const { data: sharedCount = 0 } = useQuery({
     queryKey: ['shared-count'],
@@ -31,50 +36,13 @@ export default function Dashboard() {
     },
   });
 
-  // Get recent files and folders (last 10 items sorted by updated_at)
   const { data: recentItems = { files: [], folders: [] }, isLoading: recentFilesLoading } = useQuery({
     queryKey: ['recent-items-dashboard'],
     queryFn: async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return { files: [], folders: [] };
-
-        // Get all files (not just root files) sorted by updated_at
-        const { data: allFiles, error: filesError } = await supabase
-          .from('files')
-          .select('*, folders(deleted_at)')
-          .is('deleted_at', null)
-          .eq('owner_id', user.id)
-          .order('updated_at', { ascending: false })
-          .limit(50); // Get more to ensure we have enough after filtering
-
-        if (filesError) {
-          console.error('Error fetching recent files:', filesError);
-        }
-
-        // Get all folders (not just root folders) sorted by updated_at
-        const { data: allFolders, error: foldersError } = await supabase
-          .from('folders')
-          .select('*')
-          .is('deleted_at', null)
-          .eq('owner_id', user.id)
-          .order('updated_at', { ascending: false })
-          .limit(50); // Get more to ensure we have enough after filtering
-
-        if (foldersError) {
-          console.error('Error fetching recent folders:', foldersError);
-        }
-
-        // Filter out hidden files and files in deleted folders
-        const files = ((allFiles as any[]) || []).filter(file => {
-          const isHidden = file.metadata?.is_hidden;
-          // Check if parent folder is deleted (if it exists)
-          const isParentDeleted = file.folders && file.folders.deleted_at;
-          return !isHidden && !isParentDeleted;
-        });
-
-        const folders = ((allFolders as Folder[]) || []).filter(folder => !(folder as any).metadata?.is_hidden);
-
+        const files = await fileService.getFiles();
+        const folders = await fileService.getFolders();
+        
         // Combine and sort by updated_at (most recent first)
         const allItems = [
           ...files.map(f => ({ ...f, type: 'file' as const })),
@@ -82,10 +50,9 @@ export default function Dashboard() {
         ].sort((a, b) => {
           const dateA = new Date(a.updated_at || a.created_at).getTime();
           const dateB = new Date(b.updated_at || b.created_at).getTime();
-          return dateB - dateA; // Most recent first
-        }).slice(0, 10); // Get top 10 most recently updated items
+          return dateB - dateA;
+        }).slice(0, 10);
 
-        // Split back into files and folders
         const recentFiles: File[] = [];
         const recentFolders: Folder[] = [];
 
@@ -113,8 +80,6 @@ export default function Dashboard() {
   return (
     <DashboardLayout title="Dashboard" subtitle="Welcome to VaultNexus">
       <div className="space-y-6">
-
-
         {quotaWarning && (
           <Alert variant={quotaCritical ? "destructive" : "default"} className="animate-slide-down border shadow-sm">
             <AlertTriangle className="h-4 w-4" />
@@ -148,9 +113,9 @@ export default function Dashboard() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Files</CardTitle>
             </CardHeader>
             <CardContent className="flex items-center justify-between">
-              <div className="text-2xl font-bold">{files.length}</div>
-              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                <FileIcon className="h-4 w-4 text-primary" />
+              <div className="text-xl font-semibold">{rootFiles.length}</div>
+              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <FileIcon className="h-3.5 w-3.5 text-primary" />
               </div>
             </CardContent>
           </Card>
@@ -160,9 +125,9 @@ export default function Dashboard() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Folders</CardTitle>
             </CardHeader>
             <CardContent className="flex items-center justify-between">
-              <div className="text-2xl font-bold">{folders.length}</div>
-              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                <FolderIcon className="h-4 w-4 text-primary" />
+              <div className="text-xl font-semibold">{rootFolders.length}</div>
+              <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                <FolderIcon className="h-3.5 w-3.5 text-primary" />
               </div>
             </CardContent>
           </Card>
@@ -180,21 +145,35 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Recent Files & Folders Section */}
-        <Card className="border-border/60 shadow-sm">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <Clock className="h-5 w-5 text-primary" />
+        <Card className="border-border/40 shadow-sm overflow-hidden bg-card/50 backdrop-blur-sm">
+          <CardHeader className="border-b border-border/40 bg-muted/20 py-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <div className="relative group">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 to-primary/0 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+                  <div className="relative flex items-center justify-center h-12 w-12 rounded-xl bg-background border border-border/50 shadow-sm group-hover:border-primary/30 transition-colors duration-300">
+                    <Clock className="h-6 w-6 text-primary" />
+                  </div>
                 </div>
-                <div>
-                  <CardTitle className="text-lg">Recent Activity</CardTitle>
-                  <CardDescription>Recently accessed files and folders</CardDescription>
+                <div className="space-y-1">
+                  <CardTitle className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-foreground to-foreground/70">
+                    Recent Activity
+                  </CardTitle>
+                  <CardDescription className="text-sm font-medium text-muted-foreground/80 flex items-center gap-1.5">
+                    <div className="h-1 w-1 rounded-full bg-primary/40" />
+                    Recently accessed files and folders
+                  </CardDescription>
                 </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <LocalSearchBar onSearch={setSearchQuery} />
+                <Button variant="ghost" size="sm" className="hidden lg:flex text-primary hover:text-primary hover:bg-primary/5 font-semibold text-xs py-0 h-9" onClick={() => navigate('/recent')}>
+                  View All
+                </Button>
               </div>
             </div>
           </CardHeader>
+
           <CardContent className="px-2">
             {recentFilesLoading ? (
               <div className="text-center py-12 text-muted-foreground animate-pulse">Loading recent items...</div>
@@ -207,15 +186,12 @@ export default function Dashboard() {
                 <p className="text-muted-foreground text-sm max-w-xs mx-auto mt-1">Start uploading or creating files to see them here.</p>
               </div>
             ) : (
-              // Using a slightly customized view - maybe grid or list depending on preference.
-              // Reusing FileListView but it might need better styling if it looks too plain. 
-              // Given the instruction for "stylish", let's ensure FileListView is good or wrap it well.
-              // Assuming FileListView renders rows. We'll wrap it in a cleaner container.
               <div className="min-h-[300px]">
                 <FileListView
-                  folders={recentItems.folders}
-                  files={recentItems.files}
+                  folders={recentItems.folders.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()))}
+                  files={recentItems.files.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()))}
                   onFolderClick={(folder) => {
+
                     navigate(`/files?folder=${folder.id}`);
                   }}
                   onFileClick={(file) => {
@@ -239,4 +215,3 @@ export default function Dashboard() {
     </DashboardLayout>
   );
 }
-

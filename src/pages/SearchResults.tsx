@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,30 +10,33 @@ import { File as FileIcon, Folder as FolderIcon, Search } from 'lucide-react';
 import { PreviewModal } from '@/components/preview/PreviewModal';
 
 export default function SearchResults() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
   const query = searchParams.get('q') || '';
   const [searchQuery, setSearchQuery] = useState(query);
   const [files, setFiles] = useState<File[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     
     setLoading(true);
     try {
-      const [fileResults, folderResults] = await Promise.all([
-        searchService.searchFiles(searchQuery),
-        searchService.searchFolders(searchQuery),
-      ]);
-      setFiles(fileResults);
-      setFolders(folderResults);
+      const results = await searchService.searchAll(searchQuery);
+      setFiles(results.files);
+      setFolders(results.folders);
+      setDocuments(results.documents);
     } finally {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     if (query) {
@@ -65,26 +68,32 @@ export default function SearchResults() {
           </div>
         ) : (
           <>
-            {files.length === 0 && folders.length === 0 && searchQuery && (
+            {files.length === 0 && folders.length === 0 && documents.length === 0 && searchQuery && (
               <div className="text-center py-12">
                 <Search className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">No results found</p>
+                <p className="text-muted-foreground">No results found for "{searchQuery}"</p>
               </div>
             )}
+
 
             {folders.length > 0 && (
               <div className="space-y-2">
                 <h2 className="text-lg font-semibold">Folders</h2>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                   {folders.map((folder) => (
-                    <Card key={folder.id} className="cursor-pointer hover:shadow-md">
+                    <Card 
+                      key={folder.id} 
+                      className="cursor-pointer hover:shadow-md transition-all duration-200 border-primary/20 bg-primary/5 hover:bg-primary/10"
+                      onClick={() => navigate(`/files?folder=${folder.id}`)}
+                    >
                       <CardContent className="p-6">
-                        <FolderIcon className="h-12 w-12 text-primary mb-2" />
+                        <FolderIcon className="h-10 w-10 text-primary mb-3" />
                         <p className="font-medium truncate">{folder.name}</p>
                         <p className="text-sm text-muted-foreground">Folder</p>
                       </CardContent>
                     </Card>
                   ))}
+
                 </div>
               </div>
             )}
@@ -114,6 +123,28 @@ export default function SearchResults() {
                 </div>
               </div>
             )}
+
+            {documents.length > 0 && (
+              <div className="space-y-2">
+                <h2 className="text-lg font-semibold">Documents</h2>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  {documents.map((doc) => (
+                    <Card
+                      key={doc.id}
+                      className="cursor-pointer hover:shadow-md"
+                      onClick={() => navigate(`/documents/${doc.id}`)}
+                    >
+                      <CardContent className="p-6">
+                        <FileIcon className="h-12 w-12 text-blue-500 mb-2" />
+                        <p className="font-medium truncate">{doc.name}</p>
+                        <p className="text-sm text-muted-foreground">Document</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </>
         )}
 

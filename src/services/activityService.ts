@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { apiService } from './apiService';
 
 export interface ActivityLog {
   id: string;
@@ -19,20 +19,12 @@ export const activityService = {
     metadata?: Record<string, any>
   ): Promise<void> {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      const { error } = await (supabase.from('activity_logs') as any).insert({
-        user_id: user?.id || null,
+      await apiService.post('/activity/log', {
         action_type: actionType,
         resource_type: resourceType,
         resource_id: resourceId || null,
         metadata: metadata || {},
-        ip_address: null,
       });
-
-      if (error) {
-        console.error('Error logging activity:', error);
-      }
     } catch (error) {
       console.error('Exception logging activity:', error);
     }
@@ -46,36 +38,12 @@ export const activityService = {
       limit?: number;
     }
   ): Promise<ActivityLog[]> {
-    let query = (supabase
-      .from('activity_logs') as any)
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (filters?.userId) {
-      query = query.eq('user_id', filters.userId);
-    }
-
-    if (filters?.actionType) {
-      query = query.eq('action_type', filters.actionType);
-    }
-
-    if (filters?.resourceType) {
-      query = query.eq('resource_type', filters.resourceType);
-    }
-
-    if (filters?.limit) {
-      query = query.limit(filters.limit);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
+    try {
+      const params = new URLSearchParams(filters as any).toString();
+      return await apiService.get(`/activity?${params}`);
+    } catch (error) {
       console.error('Error fetching activity logs:', error);
       return [];
     }
-
-    return (data as ActivityLog[]) || [];
   },
 };
-
-

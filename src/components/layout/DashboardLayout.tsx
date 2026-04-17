@@ -10,14 +10,34 @@ interface DashboardLayoutProps {
   subtitle?: string;
   fullHeight?: boolean;
   hideSidebar?: boolean;
+  leftAction?: React.ReactNode;
+  rightAction?: React.ReactNode;
+  titleElement?: React.ReactNode;
 }
 
-export function DashboardLayout({ children, title, subtitle, fullHeight = false, hideSidebar = false }: DashboardLayoutProps) {
+
+export function DashboardLayout({ 
+  children, 
+  title, 
+  subtitle, 
+  fullHeight = false, 
+  hideSidebar = false,
+  leftAction,
+  rightAction,
+  titleElement
+}: DashboardLayoutProps) {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {!hideSidebar && <Sidebar />}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Header title={title || 'VaultNexus'} subtitle={subtitle} />
+        <Header 
+          title={title || 'VaultNexus'} 
+          subtitle={subtitle} 
+          leftAction={leftAction}
+          rightAction={rightAction}
+          titleElement={titleElement}
+        />
+
         <AnimatePresence mode="wait">
           <motion.main
             key={title}

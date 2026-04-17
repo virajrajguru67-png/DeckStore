@@ -14,9 +14,10 @@ interface Message {
 interface ChatPanelProps {
     documentTitle: string;
     documentContent?: string;
+    onApplyToDocument?: (content: string) => void;
 }
 
-export function ChatPanel({ documentTitle, documentContent }: ChatPanelProps) {
+export function ChatPanel({ documentTitle, documentContent, onApplyToDocument }: ChatPanelProps) {
     const [messages, setMessages] = useState<Message[]>([
         { role: 'assistant', content: `Hi! I'm your DeckStore AI assistant. I've analyzed "${documentTitle}". Ask me anything about it!` }
     ]);
@@ -144,14 +145,14 @@ export function ChatPanel({ documentTitle, documentContent }: ChatPanelProps) {
                 <div className="flex items-center gap-2">
                     {isCloudAI ? <BrainCircuit className="h-3.5 w-3.5 text-indigo-500" /> : <Sparkles className="h-3.5 w-3.5 text-primary" />}
                     <span className="text-xs font-semibold">
-                        {isCloudAI ? "DeckStore AI (Groq Llama 3.3)" : "DeckStore Local Intelligence"}
+                        {isCloudAI ? "DeckStore AI " : "DeckStore Local Intelligence"}
                     </span>
                 </div>
                 <div className={cn(
                     "text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider",
                     isCloudAI ? "bg-indigo-500/10 text-indigo-500" : "bg-primary/10 text-primary"
                 )}>
-                    {isCloudAI ? "Cloud" : "Local"}
+                    {isCloudAI ? "Agent" : "Local"}
                 </div>
             </div>
 
@@ -170,10 +171,30 @@ export function ChatPanel({ documentTitle, documentContent }: ChatPanelProps) {
                                     {msg.role === 'user' ? <User className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
                                 </div>
                                 <div className={cn(
-                                    "p-3 rounded-2xl text-[13px] leading-relaxed shadow-sm",
+                                    "p-3 rounded-2xl text-[13px] leading-relaxed shadow-sm group relative whitespace-pre-line",
                                     msg.role === 'user' ? "bg-primary text-primary-foreground rounded-tr-none" : "bg-muted/50 border rounded-tl-none text-foreground"
                                 )}>
-                                    {msg.content}
+                                    {msg.role === 'assistant' ? (
+                                        <div dangerouslySetInnerHTML={{
+                                            __html: msg.content
+                                                .replace(/^(Q\d+\)|Question:)/gm, '<strong>$1</strong>')
+                                                .replace(/^(Ans:|Answer:)/gm, '<span class="text-primary font-bold">$1</span>')
+                                        }} />
+                                    ) : msg.content}
+
+                                    {msg.role === 'assistant' && onApplyToDocument && !msg.content.startsWith("Hi!") && (
+                                        <div className="mt-3 pt-3 border-t border-border/40 flex justify-end">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-7 px-2 text-[10px] font-bold uppercase tracking-wider bg-primary/5 hover:bg-primary/10 border-primary/20 text-primary transition-all active:scale-95"
+                                                onClick={() => onApplyToDocument(msg.content)}
+                                            >
+                                                <Sparkles className="h-3 w-3 mr-1.5" />
+                                                Apply to Page
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -199,7 +220,7 @@ export function ChatPanel({ documentTitle, documentContent }: ChatPanelProps) {
                     <Input
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        placeholder={isCloudAI ? "Ask Groq anything about this document..." : "Ask locally about this deck..."}
+                        placeholder={isCloudAI ? "Ask anything about document..." : "Ask locally about document..."}
                         className="rounded-xl bg-background border-border/60 pr-10 text-xs h-10 shadow-sm focus-visible:ring-primary/20 transition-all"
                         disabled={isLoading}
                     />
@@ -216,7 +237,7 @@ export function ChatPanel({ documentTitle, documentContent }: ChatPanelProps) {
                     {isCloudAI ? (
                         <>
                             <Zap className="h-3 w-3 text-indigo-500" />
-                            <span>Powered by Groq Llama 3.3</span>
+                            <span>Powered by DeckStore AI</span>
                         </>
                     ) : (
                         <>

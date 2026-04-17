@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { File as FileType, Folder as FolderType } from '@/types/file';
 import { MoreVertical, Star, ExternalLink, Share2, Pencil, Copy, FolderOpen, Trash2, Lock, Unlock } from 'lucide-react';
 import { getFileIconComponent } from '@/lib/fileUtils';
-import { FolderIcon } from '@/components/ui/FolderIcon';
+import { FolderIcon } from '@/components/ui/sidebar-icons/FolderIcon';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -18,6 +18,8 @@ import { format } from 'date-fns';
 import { fileService } from '@/services/fileService';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+
 
 interface FileListViewProps {
   folders: FolderType[];
@@ -199,6 +201,8 @@ export function FileListView({ folders, files, onFolderClick, onFileClick, onFil
               />
             </TableHead>
             <TableHead className="h-10 px-4 font-semibold text-xs text-muted-foreground">Name</TableHead>
+            <TableHead className="h-10 px-4 font-semibold text-xs text-muted-foreground">Type</TableHead>
+
             {showItemsColumn && (
               <TableHead className="h-10 px-4 font-semibold text-xs text-muted-foreground text-center">Items</TableHead>
             )}
@@ -244,6 +248,14 @@ export function FileListView({ folders, files, onFolderClick, onFileClick, onFil
                   <span className="text-sm font-medium truncate">{item.name}</span>
                 </div>
               </TableCell>
+              <TableCell className="px-4 py-2.5">
+                {item.type === 'folder' ? (
+                  <Badge variant="outline" className="text-[10px] py-0 px-2 h-5 font-normal border-primary/20 bg-primary/5 text-primary">Folder</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] py-0 px-2 h-5 font-normal border-muted-foreground/20 bg-muted text-muted-foreground">File</Badge>
+                )}
+              </TableCell>
+
               {showItemsColumn && (
                 <TableCell className="px-4 py-2.5 text-center text-muted-foreground">
                   {item.type === 'folder' && folderCounts[item.id] &&

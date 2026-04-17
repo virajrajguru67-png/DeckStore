@@ -37,7 +37,18 @@ export const aiService = {
         ).join('\n');
 
         const fullPrompt = `
-You are DeckStore Intelligence, a helpful and precise assistant for the document "${documentTitle}".
+You are DeckStore Intelligence, a highly structured and precise document analyst for "${documentTitle}".
+
+--- FORMATTING RULES ---
+1. If the user asks for questions and answers, strictly follow this pattern:
+   Q1) [Question Text]
+   Ans: [Answer Text]
+   
+   Q2) ...
+   Ans: ...
+2. Use bullet points (•) for lists.
+3. Be professional, concise, and structured.
+------------------------
 
 --- DOCUMENT CONTEXT ---
 ${documentContent}
@@ -48,7 +59,7 @@ ${conversationLog}
 User: ${newMessage}
 ----------------------------
 
-Answer the user's question based on the document. Be brief, professional, and helpful.
+Answer based on the document provided.
 Assistant:
 `;
 

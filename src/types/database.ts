@@ -17,6 +17,4 @@ export interface UserRole {
   created_at: string;
 }
 
-// Re-export types from Supabase integration
-export type { Database } from '@/integrations/supabase/types';
 

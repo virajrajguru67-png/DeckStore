@@ -94,21 +94,26 @@ export default function Recent() {
   };
 
   return (
-    <DashboardLayout title="Recent" subtitle="Recently accessed files">
+    <DashboardLayout 
+      title="Recent" 
+      subtitle="Recently accessed files"
+      rightAction={
+        selectedItemIds.size > 0 ? (
+          <Button 
+            variant="destructive" 
+            size="sm" 
+            className="h-8 text-xs font-medium"
+            onClick={handleBulkDelete}
+            disabled={isDeleting}
+          >
+            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+            Delete ({selectedItemIds.size})
+          </Button>
+        ) : undefined
+      }
+    >
       <div className="space-y-6">
-        <div className="flex items-center justify-end">
-          {selectedItemIds.size > 0 && (
-            <Button 
-              variant="destructive" 
-              size="sm" 
-              onClick={handleBulkDelete}
-              disabled={isDeleting}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete {selectedItemIds.size}
-            </Button>
-          )}
-        </div>
+
 
         {isLoading ? (
           <div className="text-center py-8 text-muted-foreground">Loading...</div>

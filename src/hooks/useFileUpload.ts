@@ -37,7 +37,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
           folderId: options.folderId,
           onProgress: (progressValue) => {
             hasRealProgress = true;
-            // Update progress with real values from Supabase
+            // Update progress with real values from upload service
             setProgress(Math.min(progressValue, 95)); // Cap at 95% until database operations complete
           },
         });

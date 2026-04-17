@@ -3,7 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import { Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 // PDF.js worker setup
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -16,17 +16,12 @@ interface PdfPreviewProps {
 
 export function PdfPreview({ url, fileName, shareId }: PdfPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { user } = useAuth();
   const [pdf, setPdf] = useState<any>(null);
   const [pageNum, setPageNum] = useState(1);
   const [scale, setScale] = useState(1.5);
   const [loading, setLoading] = useState(true);
-  const [userEmail, setUserEmail] = useState<string>('Guest');
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user?.email) setUserEmail(data.user.email);
-    });
-  }, []);
+  const userEmail = user?.email || 'Guest';
 
   useEffect(() => {
     const loadPdf = async () => {
@@ -155,5 +150,3 @@ export function PdfPreview({ url, fileName, shareId }: PdfPreviewProps) {
     </div>
   );
 }
-
-

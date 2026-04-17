@@ -17,10 +17,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
 import { AppRole } from '@/types/database';
 import { toast } from 'sonner';
 import { UserPlus } from 'lucide-react';
+import { apiService } from '@/services/apiService';
 
 interface AddUserDialogProps {
   open: boolean;
@@ -37,7 +37,6 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!email || !password || !fullName) {
       toast.error('Please fill in all fields');
       return;
@@ -45,35 +44,12 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
 
     setLoading(true);
     try {
-      // Call the Edge Function to create user
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error('You must be logged in to create users');
-        setLoading(false);
-        return;
-      }
-
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-          fullName,
-          role,
-        }),
+      await apiService.post('/admin/users', {
+        email,
+        password,
+        fullName,
+        role,
       });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create user');
-      }
 
       toast.success('User created successfully');
       setEmail('');
@@ -106,47 +82,23 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="user@example.com"
-              required
-              autoFocus
-            />
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" required autoFocus />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-              required
-              minLength={6}
-            />
+            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter password" required minLength={6} />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="fullName">Full Name</Label>
-            <Input
-              id="fullName"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="John Doe"
-              required
-            />
+            <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe" required />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="role">Role</Label>
             <Select value={role} onValueChange={(value) => setRole(value as AppRole)}>
-              <SelectTrigger id="role">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger id="role"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="viewer">Viewer</SelectItem>
                 <SelectItem value="editor">Editor</SelectItem>
@@ -157,16 +109,11 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Creating...' : 'Create User'}
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={loading}>{loading ? 'Creating...' : 'Create User'}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
-

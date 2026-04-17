@@ -15,15 +15,21 @@ import { useOfflineSync } from '@/contexts/OfflineSyncContext';
 import { useNotifications } from '@/hooks/useNotifications';
 import { SearchBar } from '@/components/search/SearchBar';
 import { useNavigate } from 'react-router-dom';
+
+
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 
 interface HeaderProps {
   title: string;
   subtitle?: string;
+  leftAction?: React.ReactNode;
+  rightAction?: React.ReactNode;
+  titleElement?: React.ReactNode;
 }
 
-export function Header({ title, subtitle }: HeaderProps) {
+export function Header({ title, subtitle, leftAction, rightAction, titleElement }: HeaderProps) {
+
   const navigate = useNavigate();
   const location = useLocation();
   const { theme, setTheme } = useTheme();
@@ -50,24 +56,43 @@ export function Header({ title, subtitle }: HeaderProps) {
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center justify-between px-4 gap-4">
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          <div className="flex items-center justify-center w-6 h-6 text-primary shrink-0">
-            {getPageIcon()}
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-sm font-semibold text-foreground truncate">
-              {title}
-            </h1>
-            {subtitle && (
-              <p className="text-xs text-muted-foreground truncate">
-                {subtitle}
-              </p>
+          {leftAction ? (
+            leftAction
+          ) : (
+            <div className="flex items-center justify-center w-6 h-6 text-primary shrink-0">
+              {getPageIcon()}
+            </div>
+          )}
+          
+          <div className="min-w-0 flex-1">
+            {titleElement ? (
+              titleElement
+            ) : (
+              <>
+                <h1 className="text-sm font-semibold text-foreground truncate">
+                  {title}
+                </h1>
+                {subtitle && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    {subtitle}
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
 
-        <div className="flex-1 max-w-md hidden md:block">
-          <SearchBar />
-        </div>
+        {rightAction ? (
+           <div className="hidden md:flex items-center gap-2">
+             {rightAction}
+           </div>
+        ) : (
+          <div className="flex-1 max-w-md hidden md:block">
+            <SearchBar />
+          </div>
+        )}
+
+
 
         {/* Mobile Search - just an icon maybe, or keep generic if responsive logic handles it. Keeping generic for now but ensuring alignment */}
 

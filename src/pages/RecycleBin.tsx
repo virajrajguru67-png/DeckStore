@@ -20,7 +20,7 @@ import { File, Folder } from '@/types/file';
 import { Trash2, RotateCcw, Grid3x3, List, MoreVertical, FileText } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { FolderIcon } from '@/components/ui/FolderIcon';
+import { FolderIcon } from '@/components/ui/sidebar-icons/FolderIcon';
 import { getFileIconComponent, getFileIconComponentLarge, formatFileSize } from '@/lib/fileUtils';
 import {
   AlertDialog,
@@ -34,6 +34,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
+import { LocalSearchBar } from '@/components/ui/LocalSearchBar';
+
 
 type ViewMode = 'grid' | 'list';
 
@@ -43,8 +45,10 @@ export default function RecycleBin() {
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; type: 'file' | 'folder' | 'document' } | null>(null);
   const [confirmText, setConfirmText] = useState('');
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
 
   const { data: deletedFiles = [], isLoading: filesLoading } = useQuery({
     queryKey: ['deleted-files'],
@@ -145,10 +149,11 @@ export default function RecycleBin() {
     }
   };
 
-  const handleDeleteClick = (item: File | Folder, type: 'file' | 'folder') => {
+  const handleDeleteClick = (item: any, type: 'file' | 'folder' | 'document') => {
     setItemToDelete({ id: item.id, name: item.name, type });
     setConfirmText('');
   };
+
 
   const isLoading = filesLoading || foldersLoading || documentsLoading;
   const hasItems = deletedFiles.length > 0 || deletedFolders.length > 0 || deletedDocuments.length > 0;
@@ -280,45 +285,67 @@ export default function RecycleBin() {
   const isIndeterminate = selectedItemIds.size > 0 && selectedItemIds.size < allItems.length;
 
   return (
-    <DashboardLayout title="Recycle Bin" subtitle="Restore or permanently delete files">
-      <div className="space-y-6">
-        <div className="flex items-center justify-end gap-2">
-          {selectedItemIds.size > 0 && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleBulkRestore}
-              >
-                <RotateCcw className="mr-2 h-4 w-4" />
-                Restore {selectedItemIds.size}
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleBulkDelete}
-                disabled={isDeleting}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete {selectedItemIds.size}
-              </Button>
-            </>
-          )}
-          <Button
-            variant={viewMode === 'grid' ? 'default' : 'outline'}
-            size="icon"
-            onClick={() => setViewMode('grid')}
-          >
-            <Grid3x3 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'list' ? 'default' : 'outline'}
-            size="icon"
-            onClick={() => setViewMode('list')}
-          >
-            <List className="h-4 w-4" />
-          </Button>
+    <DashboardLayout 
+      title="Recycle Bin" 
+      subtitle="Restore or permanently delete files"
+      rightAction={
+        <div className="flex items-center gap-2">
+           {selectedItemIds.size > 0 && (
+             <>
+               <Button
+                 variant="outline"
+                 size="sm"
+                 className="h-8 text-xs font-medium"
+                 onClick={handleBulkRestore}
+               >
+                 <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                 Restore ({selectedItemIds.size})
+               </Button>
+               <Button
+                 variant="destructive"
+                 size="sm"
+                 className="h-8 text-xs font-medium"
+                 onClick={handleBulkDelete}
+                 disabled={isDeleting}
+               >
+                 <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                 Delete ({selectedItemIds.size})
+               </Button>
+             </>
+           )}
+           <div className="flex items-center gap-1 bg-accent/30 p-1 rounded-xl border border-border/30 shrink-0">
+             <Button
+               variant="ghost"
+               size="icon"
+               className={cn(
+                 "h-8 w-8 rounded-lg transition-all",
+                 viewMode === 'grid' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+               )}
+               onClick={() => setViewMode('grid')}
+             >
+               <Grid3x3 className="h-4 w-4" />
+             </Button>
+             <Button
+               variant="ghost"
+               size="icon"
+               className={cn(
+                 "h-8 w-8 rounded-lg transition-all",
+                 viewMode === 'list' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+               )}
+               onClick={() => setViewMode('list')}
+             >
+               <List className="h-4 w-4" />
+             </Button>
+           </div>
         </div>
+      }
+    >
+      <div className="flex flex-col h-full bg-background overflow-hidden">
+        <div className="px-6 py-2 border-b bg-muted/5">
+          <LocalSearchBar onSearch={setSearchQuery} className="max-w-md" />
+        </div>
+
+
 
         {isLoading ? (
           <div className="text-center py-8 text-muted-foreground">
@@ -332,27 +359,24 @@ export default function RecycleBin() {
             </CardContent>
           </Card>
         ) : viewMode === 'list' ? (
-          <div className="overflow-auto">
+          <div className="overflow-auto pb-6">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="hover:bg-transparent border-none">
                   <TableHead className="w-[50px]">
                     <Checkbox
                       checked={isAllSelected}
                       onCheckedChange={handleSelectAll}
-                      className={cn(
-                        isIndeterminate && "border-primary bg-primary/20"
-                      )}
                     />
                   </TableHead>
-                  <TableHead className="w-[30%]">Name</TableHead>
+                  <TableHead>Name</TableHead>
                   <TableHead className="text-right">Size</TableHead>
                   <TableHead>Deleted At</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {allItems.map((item) => (
+                {allItems.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())).map((item) => (
                   <TableRow
                     key={item.id}
                     className={cn(
@@ -374,16 +398,16 @@ export default function RecycleBin() {
                           <FileText size={20} className="text-primary shrink-0" />
                         ) : (
                           <div className="shrink-0">
-                            {getFileIconComponent((item as File).mime_type, (item as File).name, 'sm')}
+                            {getFileIconComponent((item as any).mime_type, (item as any).name, 'sm')}
                           </div>
                         )}
                         <span className="truncate">{item.name}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
-                      {item.type === 'file' ? formatFileSize((item as File).size) : '-'}
+                      {item.type === 'file' ? formatFileSize((item as any).size) : '-'}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground whitespace-nowrap">
                       {item.deleted_at && format(new Date(item.deleted_at), 'MMM d, yyyy h:mm a')}
                     </TableCell>
                     <TableCell className="px-2" onClick={(e) => e.stopPropagation()}>
@@ -428,7 +452,8 @@ export default function RecycleBin() {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {allItems.map((item) => (
+            {allItems.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())).map((item) => (
+
               <Card key={item.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex flex-col items-center text-center">

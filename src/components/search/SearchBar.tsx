@@ -11,7 +11,10 @@ import {
 } from '@/components/ui/command';
 import { searchService } from '@/services/searchService';
 import { File, Folder } from '@/types/file';
-import { Search } from 'lucide-react';
+import { Search, Folder as FolderIcon, FileText, File as FileIcon } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+
+
 
 export function SearchBar() {
   const navigate = useNavigate();
@@ -19,7 +22,9 @@ export function SearchBar() {
   const [query, setQuery] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -37,31 +42,53 @@ export function SearchBar() {
 
     const timeoutId = setTimeout(async () => {
       if (query.trim()) {
+        console.log('Searching for:', query);
         setLoading(true);
-        const [fileResults, folderResults] = await Promise.all([
-          searchService.searchFiles(query),
-          searchService.searchFolders(query),
-        ]);
-        setFiles(fileResults.slice(0, 5));
-        setFolders(folderResults.slice(0, 5));
-        setLoading(false);
+        try {
+          const results = await searchService.searchAll(query);
+          console.log('SearchAll results:', results);
+          
+          setFiles(results.files.slice(0, 5));
+          setFolders(results.folders.slice(0, 5));
+          setDocuments(results.documents.slice(0, 5));
+        } catch (err) {
+          console.error('Search failed in component:', err);
+        } finally {
+          setLoading(false);
+        }
+
+
+
       } else {
         setFiles([]);
         setFolders([]);
+        setDocuments([]);
       }
     }, 300);
+
+
 
     return () => clearTimeout(timeoutId);
   }, [query, open]);
 
-  const handleSelect = (type: 'file' | 'folder', id: string) => {
+  const handleSelect = (type: 'file' | 'folder' | 'document', id: string) => {
     if (type === 'folder') {
       navigate(`/files?folder=${id}`);
+    } else if (type === 'document') {
+      navigate(`/documents/${id}`);
     } else {
-      navigate(`/files`);
+      // Find the file to see its folder_id
+      const file = files.find(f => f.id === id);
+      if (file && file.folder_id) {
+        navigate(`/files?folder=${file.folder_id}`);
+      } else {
+        navigate(`/files`);
+      }
     }
     setOpen(false);
   };
+
+
 
   return (
     <>
@@ -77,27 +104,49 @@ export function SearchBar() {
         </kbd>
       </Button>
 
-      <CommandDialog open={open} onOpenChange={setOpen}>
+      <CommandDialog open={open} onOpenChange={setOpen} shouldFilter={false}>
+
         <CommandInput
           placeholder="Search files and folders..."
           value={query}
           onValueChange={setQuery}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && query.trim()) {
+              navigate(`/search?q=${encodeURIComponent(query)}`);
+              setOpen(false);
+            }
+          }}
         />
+
         <CommandList>
           {loading && (
             <CommandEmpty>Searching...</CommandEmpty>
           )}
-          {!loading && query && files.length === 0 && folders.length === 0 && (
+          {!loading && query && files.length === 0 && folders.length === 0 && documents.length === 0 && (
             <CommandEmpty>No results found.</CommandEmpty>
           )}
+
           {folders.length > 0 && (
             <CommandGroup heading="Folders">
               {folders.map((folder) => (
                 <CommandItem
                   key={folder.id}
+                  value={folder.name}
                   onSelect={() => handleSelect('folder', folder.id)}
+
+                  className="flex items-center gap-3 p-3 cursor-pointer"
                 >
-                  <span>{folder.name}</span>
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+                    <FolderIcon className="h-4 w-4" />
+                  </div>
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium truncate">{folder.name}</span>
+                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 font-normal border-primary/20 bg-primary/5 text-primary">Folder</Badge>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate">{folder.path || '/'}</div>
+                  </div>
+
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -107,13 +156,55 @@ export function SearchBar() {
               {files.map((file) => (
                 <CommandItem
                   key={file.id}
+                  value={file.name}
                   onSelect={() => handleSelect('file', file.id)}
+
+                  className="flex items-center gap-3 p-3 cursor-pointer"
                 >
-                  <span>{file.name}</span>
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-accent-foreground shrink-0">
+                    <FileIcon className="h-4 w-4" />
+                  </div>
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium truncate">{file.name}</span>
+                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 font-normal border-accent-foreground/20 bg-accent text-accent-foreground">File</Badge>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground truncate">{file.path || '/'}</div>
+                  </div>
+
                 </CommandItem>
               ))}
             </CommandGroup>
           )}
+
+          {documents.length > 0 && (
+            <CommandGroup heading="Documents">
+              {documents.map((doc) => (
+                <CommandItem
+                  key={doc.id}
+                  value={doc.name}
+                  onSelect={() => handleSelect('document', doc.id)}
+
+                  className="flex items-center gap-3 p-3 cursor-pointer"
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500/10 text-orange-500 shrink-0">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium truncate">{doc.name}</span>
+                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4 font-normal border-orange-500/20 bg-orange-500/5 text-orange-500">Document</Badge>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">/documents</div>
+                  </div>
+
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+
+
+
         </CommandList>
       </CommandDialog>
     </>

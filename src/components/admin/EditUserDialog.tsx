@@ -17,10 +17,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
 import { AppRole, Profile } from '@/types/database';
 import { toast } from 'sonner';
 import { User } from 'lucide-react';
+import { apiService } from '@/services/apiService';
 
 interface EditUserDialogProps {
   open: boolean;
@@ -43,9 +43,7 @@ export function EditUserDialog({ open, onOpenChange, user, onUserUpdated }: Edit
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!user) return;
-
     if (!fullName) {
       toast.error('Please enter a full name');
       return;
@@ -53,36 +51,10 @@ export function EditUserDialog({ open, onOpenChange, user, onUserUpdated }: Edit
 
     setLoading(true);
     try {
-      // Update profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ full_name: fullName })
-        .eq('id', user.id);
-
-      if (profileError) {
-        throw profileError;
-      }
-
-      // Update role (delete old, insert new)
-      const { error: deleteError } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', user.id);
-
-      if (deleteError) {
-        throw deleteError;
-      }
-
-      const { error: insertError } = await supabase
-        .from('user_roles')
-        .insert({
-          user_id: user.id,
-          role,
-        });
-
-      if (insertError) {
-        throw insertError;
-      }
+      await apiService.put(`/profiles/${user.id}`, {
+        fullName,
+        role
+      });
 
       toast.success('User updated successfully');
       onOpenChange(false);
@@ -113,34 +85,19 @@ export function EditUserDialog({ open, onOpenChange, user, onUserUpdated }: Edit
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={user.email}
-              disabled
-              className="bg-muted"
-            />
+            <Input id="email" type="email" value={user.email} disabled className="bg-muted" />
             <p className="text-xs text-muted-foreground">Email cannot be changed</p>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="fullName">Full Name</Label>
-            <Input
-              id="fullName"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="John Doe"
-              required
-              autoFocus
-            />
+            <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe" required autoFocus />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="role">Role</Label>
             <Select value={role} onValueChange={(value) => setRole(value as AppRole)}>
-              <SelectTrigger id="role">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger id="role"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="viewer">Viewer</SelectItem>
                 <SelectItem value="editor">Editor</SelectItem>
@@ -151,16 +108,11 @@ export function EditUserDialog({ open, onOpenChange, user, onUserUpdated }: Edit
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Updating...' : 'Update User'}
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={loading}>{loading ? 'Updating...' : 'Update User'}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
-

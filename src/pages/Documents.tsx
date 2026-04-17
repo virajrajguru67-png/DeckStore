@@ -9,15 +9,30 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { FileText, Plus, Trash2, Edit, Star, StarOff, Eye, EyeOff, Grid3x3, List } from 'lucide-react';
+import { FileText, Plus, Trash2, Edit, Star, StarOff, Eye, EyeOff, Grid3x3, List, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Document } from '@/types/document';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { LocalSearchBar } from '@/components/ui/LocalSearchBar';
 import { cn } from '@/lib/utils';
 
+
 type ViewMode = 'grid' | 'list';
+
+// Helper to parse tags
+const parseTags = (tags: string | string[] | Record<string, unknown> | null): string[] => {
+  if (Array.isArray(tags)) return tags;
+  if (typeof tags === 'string') {
+    try {
+      return JSON.parse(tags) || [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
 
 export default function Documents() {
   const queryClient = useQueryClient();
@@ -30,8 +45,12 @@ export default function Documents() {
   // documentEditorOpen state removed
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
   const [documentToDelete, setDocumentToDelete] = useState<Document | null>(null);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
+
 
   // Form state
   const [formData, setFormData] = useState({
@@ -45,6 +64,17 @@ export default function Documents() {
     queryFn: () => documentService.getDocuments(),
     retry: false,
   });
+
+  const filteredDocuments = documents.filter(d => 
+    d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (d.description && d.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const totalPages = Math.ceil(filteredDocuments.length / itemsPerPage);
+  const paginatedDocuments = filteredDocuments.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   // Show error toast if query fails
   useEffect(() => {
@@ -223,74 +253,72 @@ export default function Documents() {
   };
 
   return (
-    <DashboardLayout title="Documents" subtitle="Manage your document projects" fullHeight>
-      <div className="flex flex-col h-full bg-background">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border/40 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10 transition-all duration-200">
-          <div className="flex items-center gap-3">
-            <div className="flex flex-col">
-              <h2 className="text-lg font-semibold tracking-tight">Documents</h2>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {selectedDocumentIds.size > 0 && (
-              <div className="flex items-center gap-2 mr-2 animate-fade-in bg-destructive/10 px-3 py-1.5 rounded-xl border border-destructive/20">
-                <span className="text-xs font-medium text-destructive">{selectedDocumentIds.size} selected</span>
-                <div className="h-4 w-px bg-destructive/20 mx-1" />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
-                  onClick={handleBulkDelete}
-                  disabled={isDeleting}
-                >
-                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                  Delete
-                </Button>
-              </div>
-            )}
+    <DashboardLayout 
+      title="Documents" 
+      subtitle="Manage your document projects"
+      fullHeight
+      rightAction={
+        <div className="flex items-center gap-2">
+           {selectedDocumentIds.size > 0 && (
+             <Button
+               variant="destructive"
+               size="sm"
+               className="h-8 text-xs font-medium"
+               onClick={handleBulkDelete}
+               disabled={isDeleting}
+             >
+               <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+               Delete ({selectedDocumentIds.size})
+             </Button>
+           )}
+           <div className="flex items-center gap-1 bg-accent/30 p-1 rounded-xl border border-border/30">
+             <Button
+               variant="default"
+               size="sm"
+               className="h-8 text-xs font-medium rounded-lg"
+               onClick={() => {
+                 setFormData({ name: '', description: '', tags: '' });
+                 setCreateDialogOpen(true);
+               }}
+             >
+               <Plus className="mr-1.5 h-3.5 w-3.5" />
+               New
+             </Button>
+           </div>
 
-            <div className="flex items-center gap-2 bg-accent/30 p-1 rounded-xl border border-border/30">
-              <Button
-                variant="default"
-                size="sm"
-                className="h-8 text-xs font-medium shadow-sm rounded-lg"
-                onClick={() => {
-                  setFormData({ name: '', description: '', tags: '' });
-                  setCreateDialogOpen(true);
-                }}
-              >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                New Document
-              </Button>
-            </div>
-
-            <div className="flex items-center bg-accent/30 p-1 rounded-xl border border-border/30">
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-8 w-8 rounded-lg transition-all",
-                  viewMode === 'grid' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-                onClick={() => setViewMode('grid')}
-              >
-                <Grid3x3 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-8 w-8 rounded-lg transition-all",
-                  viewMode === 'list' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-                onClick={() => setViewMode('list')}
-              >
-                <List className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+           <div className="flex items-center bg-accent/30 p-1 rounded-xl border border-border/30">
+             <Button
+               variant="ghost"
+               size="icon"
+               className={cn(
+                 "h-8 w-8 rounded-lg transition-all",
+                 viewMode === 'grid' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+               )}
+               onClick={() => setViewMode('grid')}
+             >
+               <Grid3x3 className="h-4 w-4" />
+             </Button>
+             <Button
+               variant="ghost"
+               size="icon"
+               className={cn(
+                 "h-8 w-8 rounded-lg transition-all",
+                 viewMode === 'list' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+               )}
+               onClick={() => setViewMode('list')}
+             >
+               <List className="h-4 w-4" />
+             </Button>
+           </div>
         </div>
+      }
+    >
+      <div className="flex flex-col h-full bg-background overflow-hidden">
+        {/* Local Search Sub-header */}
+        <div className="px-6 py-2 border-b bg-muted/5">
+          <LocalSearchBar onSearch={setSearchQuery} className="max-w-md" />
+        </div>
+
 
         {/* Documents List/Grid */}
         <div className="flex-1 overflow-auto p-4">
@@ -319,7 +347,7 @@ export default function Documents() {
             </div>
           ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {documents.map((document) => (
+              {paginatedDocuments.map((document) => (
                 <Card
                   key={document.id}
                   className={cn(
@@ -370,14 +398,14 @@ export default function Documents() {
                   </CardHeader>
                   <CardContent className="pt-0">
                     <div className="flex flex-wrap gap-1 mb-2">
-                      {document.tags.slice(0, 3).map((tag) => (
+                      {parseTags(document.tags).slice(0, 3).map((tag) => (
                         <Badge key={tag} variant="secondary" className="text-xs">
                           {tag}
                         </Badge>
                       ))}
-                      {document.tags.length > 3 && (
+                      {parseTags(document.tags).length > 3 && (
                         <Badge variant="secondary" className="text-xs">
-                          +{document.tags.length - 3}
+                          +{parseTags(document.tags).length - 3}
                         </Badge>
                       )}
                     </div>
@@ -431,7 +459,7 @@ export default function Documents() {
             </div>
           ) : (
             <div className="space-y-2">
-              {documents.map((document) => (
+              {paginatedDocuments.map((document) => (
                 <Card
                   key={document.id}
                   className={cn(
@@ -472,14 +500,14 @@ export default function Documents() {
                             </p>
                           )}
                           <div className="flex items-center gap-2 mt-2">
-                            {document.tags.slice(0, 3).map((tag) => (
+                            {parseTags(document.tags).slice(0, 3).map((tag) => (
                               <Badge key={tag} variant="secondary" className="text-xs">
                                 {tag}
                               </Badge>
                             ))}
-                            {document.tags.length > 3 && (
+                            {parseTags(document.tags).length > 3 && (
                               <Badge variant="secondary" className="text-xs">
-                                +{document.tags.length - 3}
+                                +{parseTags(document.tags).length - 3}
                               </Badge>
                             )}
                           </div>
@@ -533,7 +561,52 @@ export default function Documents() {
               ))}
             </div>
           )}
+
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="px-6 py-4 border-t flex items-center justify-between bg-muted/5">
+            <p className="text-xs text-muted-foreground">
+              Showing <span className="font-medium text-foreground">{((currentPage - 1) * itemsPerPage) + 1}</span> to <span className="font-medium text-foreground">{Math.min(currentPage * itemsPerPage, filteredDocuments.length)}</span> of <span className="font-medium text-foreground">{filteredDocuments.length}</span> documents
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <Button
+                    key={page}
+                    variant={currentPage === page ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 w-8 p-0 text-xs font-bold"
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </Button>
+                ))}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Create Document Dialog */}
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>

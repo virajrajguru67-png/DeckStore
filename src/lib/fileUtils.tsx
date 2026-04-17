@@ -33,10 +33,10 @@ export function getFileExtension(fileName: string): string {
 export function getFileIconComponent(
   mimeType: string | null | undefined,
   fileName?: string,
-  size: 'sm' | 'md' | 'lg' = 'md'
+  size: 'xs' | 'sm' | 'md' | 'lg' = 'md'
 ): ReactNode {
   const extension = fileName ? getFileExtension(fileName) : '';
-  const iconSize = size === 'sm' ? 'h-4 w-4' : size === 'lg' ? 'h-6 w-6' : 'h-5 w-5';
+  const iconSize = size === 'xs' ? 'h-3 w-3' : size === 'sm' ? 'h-4 w-4' : size === 'lg' ? 'h-6 w-6' : 'h-5 w-5';
 
   // Check by MIME type first
   if (mimeType === 'application/vnd.deckstore.document') {

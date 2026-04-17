@@ -22,9 +22,10 @@ import RecycleBin from "./pages/RecycleBin";
 import SearchResults from "./pages/SearchResults";
 import Users from "./pages/admin/Users";
 import Storage from "./pages/admin/Storage";
-import Settings from "./pages/admin/Settings";
+// No Admin Settings needed as they were redundant
 import AuditLogs from "./pages/admin/AuditLogs";
 import Analytics from "./pages/Analytics";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -133,6 +134,16 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="/settings"
+                  element={
+                    <ProtectedRoute>
+                      <Settings />
+                    </ProtectedRoute>
+                  }
+                />
+
+
+                <Route
                   path="/admin/users"
                   element={
                     <ProtectedRoute minRole="admin">
@@ -149,14 +160,6 @@ const App = () => (
                   }
                 />
                 <Route
-                  path="/admin/settings"
-                  element={
-                    <ProtectedRoute minRole="admin">
-                      <Settings />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
                   path="/admin/audit"
                   element={
                     <ProtectedRoute minRole="admin">
@@ -165,6 +168,7 @@ const App = () => (
                   }
                 />
                 <Route path="*" element={<NotFound />} />
+
               </Routes>
             </OfflineSyncProvider>
           </AuthProvider>

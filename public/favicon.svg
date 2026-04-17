@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="DeckStore">
+  <defs>
+    <linearGradient id="deckGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1d4ed8" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+    <linearGradient id="fillGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#e2e8f0" stop-opacity="0.95" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#deckGradient)" />
+  <path fill="url(#fillGradient)" d="M40 36h48a4 4 0 0 1 4 4v48a4 4 0 0 1-4 4H40a4 4 0 0 1-4-4V40a4 4 0 0 1 4-4zm8 12v12h28v-12H48zm0 20v16h28V68H48z" />
+  <path d="M48 48h28M48 68h28" stroke="#1d4ed8" stroke-width="6" stroke-linecap="round" />
+</svg>
