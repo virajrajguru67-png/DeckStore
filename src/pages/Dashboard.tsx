@@ -160,7 +160,7 @@ export default function Dashboard() {
                     Recent Activity
                   </CardTitle>
                   <CardDescription className="text-sm font-medium text-muted-foreground/80 flex items-center gap-1.5">
-                    <div className="h-1 w-1 rounded-full bg-primary/40" />
+                    <span className="h-1.1 w-1.1 rounded-full bg-primary/40 block" />
                     Recently accessed files and folders
                   </CardDescription>
                 </div>

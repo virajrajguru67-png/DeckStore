@@ -102,11 +102,13 @@ export function FileListView({ folders, files, onFolderClick, onFileClick, onFil
   }, [folders, files]);
 
   const allItems = [
-    ...folders.map(f => ({ ...f, type: 'folder' as const })),
-    ...files.map(f => ({ ...f, type: 'file' as const }))
+    ...folders.map(f => ({ ...f, type: (f as any).type || 'folder' as const })),
+    ...files.map(f => ({ ...f, type: (f as any).type || 'file' as const }))
   ].sort((a, b) => {
     if (a.type !== b.type) {
-      return a.type === 'folder' ? -1 : 1;
+      if (a.type === 'folder' || b.type === 'folder') {
+        return a.type === 'folder' ? -1 : 1;
+      }
     }
     return a.name.localeCompare(b.name);
   });
@@ -152,6 +154,7 @@ export function FileListView({ folders, files, onFolderClick, onFileClick, onFil
       queryClient.invalidateQueries({ queryKey: ['favorite-files'] });
       queryClient.invalidateQueries({ queryKey: ['favorite-folders'] });
       queryClient.invalidateQueries({ queryKey: ['favorite-documents'] });
+      queryClient.invalidateQueries({ queryKey: ['folder-contents'] });
     }
   };
 

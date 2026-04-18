@@ -1,6 +1,7 @@
 import { apiService } from './apiService';
 import { toast } from 'sonner';
 import type { Profile } from '@/types/database';
+import { activityService } from './activityService';
 
 export interface BrandingSettings {
     custom_branding_logo_url: string | null;
@@ -22,6 +23,7 @@ export const profileService = {
         try {
             await apiService.post('/profiles/branding', settings);
             toast.success('Branding settings updated');
+            await activityService.logActivity('UPDATE_BRANDING', 'SYSTEM', null, settings);
             return true;
         } catch (error) {
             console.error('Error updating branding:', error);
@@ -54,6 +56,7 @@ export const profileService = {
         try {
             await apiService.post('/profiles/update', data);
             toast.success('Settings updated successfully');
+            await activityService.logActivity('UPDATE_PROFILE', 'USER', null, data);
             return true;
         } catch (error) {
             console.error('Error updating settings:', error);
@@ -66,6 +69,7 @@ export const profileService = {
         try {
             await apiService.post('/auth/change-password', { currentPassword, newPassword });
             toast.success('Password updated successfully');
+            await activityService.logActivity('CHANGE_PASSWORD', 'USER');
             return true;
         } catch (error) {
             console.error('Error changing password:', error);

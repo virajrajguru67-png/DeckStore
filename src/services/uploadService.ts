@@ -47,11 +47,8 @@ export const uploadService = {
   },
 
   async getDownloadUrl(storageKey: string): Promise<string | null> {
-    // Our local server serves files from /uploads/{storageKey}
-    // We get the token and build the URL
     const token = localStorage.getItem('token');
-    const API_BASE = import.meta.env.VITE_API_URL.replace('/api', '');
-    return `${API_BASE}/uploads/${storageKey}?token=${token}`;
+    return `/uploads/${storageKey}?token=${token}`;
   },
 
   async updateStorageQuota(userId: string, fileSize: number): Promise<void> {

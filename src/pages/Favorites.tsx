@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { DeleteConfirmationDialog } from '@/components/ui/DeleteConfirmationDialog';
-import { File as FileIcon, Folder as FolderIcon, Star, Trash2 } from 'lucide-react';
+import { File as FileIcon, Folder as FolderIcon, Star, Trash2, ChevronLeft } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { File as FileType, Folder as FolderType } from '@/types/file';
 import { PreviewModal } from '@/components/preview/PreviewModal';
@@ -14,6 +14,10 @@ import { FileListView } from '@/components/file-explorer/FileListView';
 import { toast } from 'sonner';
 import { LocalSearchBar } from '@/components/ui/LocalSearchBar';
 import { documentService } from '@/services/documentService';
+import { BreadcrumbNav } from '@/components/file-explorer/BreadcrumbNav';
+import { MoveFileDialog } from '@/components/file-operations/MoveFileDialog';
+import { RenameDialog } from '@/components/file-operations/RenameDialog';
+import { ShareDialog } from '@/components/sharing/ShareDialog';
 
 
 export default function Favorites() {
@@ -23,6 +27,12 @@ export default function Favorites() {
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<{ id: string; name: string; type: 'file' | 'folder' | 'document' } | null>(null);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [breadcrumbs, setBreadcrumbs] = useState<Array<{ id: string | null; name: string }>>([]);
   const queryClient = useQueryClient();
 
 
@@ -41,7 +51,22 @@ export default function Favorites() {
     queryFn: () => documentService.getFavoriteDocuments(),
   });
 
-  const isLoading = filesLoading || foldersLoading || documentsLoading;
+  const { data: folderContents, isLoading: contentsLoading } = useQuery({
+    queryKey: ['folder-contents', currentFolderId],
+    queryFn: () => currentFolderId ? fileService.getFolderContents(currentFolderId) : null,
+    enabled: !!currentFolderId,
+  });
+
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['favorite-files'] });
+    await queryClient.invalidateQueries({ queryKey: ['favorite-folders'] });
+    await queryClient.invalidateQueries({ queryKey: ['favorite-documents'] });
+    if (currentFolderId) {
+      await queryClient.invalidateQueries({ queryKey: ['folder-contents', currentFolderId] });
+    }
+  };
+
+  const isLoading = filesLoading || foldersLoading || documentsLoading || (!!currentFolderId && contentsLoading);
 
   // Map documents to File-like objects for the view
   const mappedDocuments = favoriteDocuments.map(doc => ({
@@ -75,6 +100,38 @@ export default function Favorites() {
       queryClient.invalidateQueries({ queryKey: ['favorite-files'] });
       queryClient.invalidateQueries({ queryKey: ['favorite-folders'] });
       queryClient.invalidateQueries({ queryKey: ['favorite-documents'] });
+      if (currentFolderId) {
+        queryClient.invalidateQueries({ queryKey: ['folder-contents', currentFolderId] });
+      }
+    }
+  };
+
+  const handleFolderClick = async (folder: FolderType) => {
+    setCurrentFolderId(folder.id);
+    
+    // Update breadcrumbs
+    const newBreadcrumbs = [...breadcrumbs];
+    newBreadcrumbs.push({ id: folder.id, name: folder.name });
+    setBreadcrumbs(newBreadcrumbs);
+  };
+
+  const handleNavigate = (folderId: string | null) => {
+    setCurrentFolderId(folderId);
+    
+    if (!folderId) {
+      setBreadcrumbs([]);
+    } else {
+      const index = breadcrumbs.findIndex(b => b.id === folderId);
+      if (index !== -1) {
+        setBreadcrumbs(breadcrumbs.slice(0, index + 1));
+      }
+    }
+  };
+
+  const handleBack = () => {
+    if (breadcrumbs.length > 0) {
+      const parentId = breadcrumbs.length > 1 ? breadcrumbs[breadcrumbs.length - 2].id : null;
+      handleNavigate(parentId);
     }
   };
 
@@ -138,34 +195,58 @@ export default function Favorites() {
     }
   };
 
-  const handleFileAction = (action: string, item: any, type: string) => {
-    if (action === 'delete') {
-      const confirm = window.confirm(`Are you sure you want to delete ${item.name}?`);
-      if (confirm) {
+  const handleFileAction = async (action: string, item: any, type: 'file' | 'folder' | 'document') => {
+    setSelectedItem({ id: item.id, name: item.name, type });
+
+    switch (action) {
+      case 'share':
+        setShareDialogOpen(true);
+        break;
+      case 'rename':
+        setRenameDialogOpen(true);
+        break;
+      case 'move':
+        if (type !== 'document') setMoveDialogOpen(true);
+        break;
+      case 'copy':
         if (type === 'file') {
-          fileService.deleteFile(item.id).then(async () => {
-            await queryClient.invalidateQueries({ queryKey: ['favorite-files'] });
-            await queryClient.refetchQueries({ queryKey: ['favorite-files'] });
-          });
-        } else if (type === 'folder') {
-          fileService.deleteFolder(item.id).then(async () => {
-            await queryClient.invalidateQueries({ queryKey: ['favorite-folders'] });
-            await queryClient.refetchQueries({ queryKey: ['favorite-folders'] });
-          });
-        } else if (type === 'document') {
-          documentService.deleteDocument(item.id).then(async () => {
-            await queryClient.invalidateQueries({ queryKey: ['favorite-documents'] });
-            await queryClient.refetchQueries({ queryKey: ['favorite-documents'] });
-          });
+          await fileService.copyFile(item.id, currentFolderId);
+          refresh();
         }
-      }
+        break;
+      case 'hide':
+        let hideSuccess = false;
+        if (type === 'file') hideSuccess = await fileService.toggleHiddenFile(item.id, true);
+        else if (type === 'folder') hideSuccess = await fileService.toggleHiddenFolder(item.id, true);
+        else if (type === 'document') hideSuccess = await documentService.toggleHidden(item.id, true);
+        if (hideSuccess) refresh();
+        break;
+      case 'delete':
+        const confirm = window.confirm(`Are you sure you want to delete ${item.name}?`);
+        if (confirm) {
+          if (type === 'file') {
+            fileService.deleteFile(item.id).then(refresh);
+          } else if (type === 'folder') {
+            fileService.deleteFolder(item.id).then(refresh);
+          } else if (type === 'document') {
+            documentService.deleteDocument(item.id).then(refresh);
+          }
+        }
+        break;
     }
   };
 
   return (
     <DashboardLayout 
-      title="Favorites" 
-      subtitle="Your favorite files and folders"
+      title={currentFolderId ? breadcrumbs[breadcrumbs.length - 1]?.name || "Folder" : "Favorites"} 
+      subtitle={currentFolderId ? "Exploring folder contents" : "Your favorite files and folders"}
+      leftAction={
+        currentFolderId ? (
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={handleBack}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        ) : undefined
+      }
       rightAction={
         selectedItemIds.size > 0 ? (
           <Button
@@ -182,30 +263,43 @@ export default function Favorites() {
       }
     >
       <div className="flex flex-col h-full bg-background overflow-hidden">
-        <div className="px-6 py-2 border-b bg-muted/5">
+        <div className="px-6 py-2 border-b bg-muted/5 flex items-center justify-between">
           <LocalSearchBar onSearch={setSearchQuery} className="max-w-md" />
         </div>
+
+        {currentFolderId && (
+          <BreadcrumbNav
+            items={breadcrumbs}
+            onNavigate={handleNavigate}
+          />
+        )}
 
 
 
         {isLoading ? (
           <div className="text-center py-8 text-muted-foreground">Loading...</div>
-        ) : allFavorites.length === 0 ? (
+        ) : (!currentFolderId && allFavorites.length === 0) || (currentFolderId && folderContents?.files.length === 0 && folderContents?.folders.length === 0) ? (
           <Card>
             <CardContent className="py-12 text-center">
-              <Star className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No favorites yet</p>
+              {currentFolderId ? <FolderIcon className="h-16 w-16 mx-auto text-muted-foreground mb-4 opacity-20" /> : <Star className="h-16 w-16 mx-auto text-muted-foreground mb-4" />}
+              <p className="text-muted-foreground">{currentFolderId ? "This folder is empty" : "No favorites yet"}</p>
             </CardContent>
           </Card>
         ) : (
-          <div className="h-[calc(100vh-300px)]">
+          <div className="h-[calc(100vh-250px)]">
             <FileListView
-              folders={favoriteFolders.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()))}
-              files={[...favoriteFiles, ...mappedDocuments].filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())) as any}
-              onFolderClick={() => { }}
+              folders={
+                (currentFolderId ? folderContents?.folders : favoriteFolders)
+                ?.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())) || []
+              }
+              files={
+                (currentFolderId ? folderContents?.files : [...favoriteFiles, ...mappedDocuments])
+                ?.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())) as any[] || []
+              }
+              onFolderClick={handleFolderClick}
 
               onFileClick={(file) => {
-                if ((file as any).type === 'document') {
+                if ((file as any).type === 'document' || (file as any).mime_type === 'application/vnd.deckstore.document') {
                   // Navigate to documents page or open editor if we had routing
                   toast.info('Opening document...', { description: file.name });
                 } else {
@@ -232,6 +326,31 @@ export default function Favorites() {
           open={previewOpen}
           onOpenChange={setPreviewOpen}
           file={selectedFile}
+        />
+
+        <MoveFileDialog
+          open={moveDialogOpen}
+          onOpenChange={setMoveDialogOpen}
+          fileId={selectedItem?.type === 'file' ? selectedItem.id : undefined}
+          folderId={selectedItem?.type === 'folder' ? selectedItem.id : undefined}
+          onMove={refresh}
+        />
+
+        <RenameDialog
+          open={renameDialogOpen}
+          onOpenChange={setRenameDialogOpen}
+          fileId={selectedItem?.type === 'file' ? selectedItem.id : undefined}
+          folderId={selectedItem?.type === 'folder' ? selectedItem.id : undefined}
+          documentId={selectedItem?.type === 'document' ? selectedItem.id : undefined}
+          currentName={selectedItem?.name || ''}
+          onRename={refresh}
+        />
+
+        <ShareDialog
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+          resourceType={selectedItem?.type === 'document' ? 'document' : (selectedItem?.type || 'file')}
+          resourceId={selectedItem?.id || ''}
         />
       </div>
     </DashboardLayout>

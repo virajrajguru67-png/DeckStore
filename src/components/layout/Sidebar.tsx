@@ -1,14 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme } from 'next-themes';
 import { useState, useEffect } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
-  Sun,
-  Moon,
-  Monitor,
 } from 'lucide-react';
 import { DashboardIcon } from '@/components/ui/sidebar-icons/DashboardIcon';
 import { FolderIcon } from '@/components/ui/sidebar-icons/FolderIcon';
@@ -49,23 +45,23 @@ interface NavItem {
 }
 
 const primaryItems: NavItem[] = [
-  { label: 'Dashboard', href: '/', icon: <DashboardIcon size={18} />, color: "text-sky-500" },
-  { label: 'Files', href: '/files', icon: <FolderIcon size={18} />, color: "text-amber-500" },
-  { label: 'Documents', href: '/documents', icon: <DocumentsIcon size={18} />, color: "text-emerald-500" },
-  { label: 'Analytics', href: '/analytics', icon: <AnalyticsIcon size={18} />, color: "text-rose-500" },
-  { label: 'Shared', href: '/shared', icon: <SharedIcon size={18} />, color: "text-violet-500" },
-  { label: 'Favorites', href: '/favorites', icon: <FavoritesIcon size={18} />, color: "text-orange-400" },
-  { label: 'Hidden', href: '/hidden', icon: <HiddenIcon size={18} />, color: "text-slate-400" },
-  { label: 'Recycle Bin', href: '/trash', icon: <RecycleBinIcon size={18} />, color: "text-red-500" },
-  { label: 'Settings', href: '/settings', icon: <SettingsIcon size={18} />, color: "text-slate-400" },
+  { label: 'Dashboard', href: '/', icon: <DashboardIcon size={16} />, color: "text-sky-500" },
+  { label: 'Files', href: '/files', icon: <FolderIcon size={16} />, color: "text-amber-500" },
+  { label: 'Documents', href: '/documents', icon: <DocumentsIcon size={16} />, color: "text-emerald-500" },
+  { label: 'Analytics', href: '/analytics', icon: <AnalyticsIcon size={16} />, color: "text-rose-500" },
+  { label: 'Shared', href: '/shared', icon: <SharedIcon size={16} />, color: "text-violet-500" },
+  { label: 'Favorites', href: '/favorites', icon: <FavoritesIcon size={16} />, color: "text-orange-400" },
+  { label: 'Hidden', href: '/hidden', icon: <HiddenIcon size={16} />, color: "text-slate-400" },
+  { label: 'Recycle Bin', href: '/trash', icon: <RecycleBinIcon size={16} />, color: "text-red-500" },
+  { label: 'Settings', href: '/settings', icon: <SettingsIcon size={16} />, color: "text-slate-400" },
 ];
 
 
 
 const adminItems: NavItem[] = [
-  { label: 'Users', href: '/admin/users', icon: <UsersIcon size={18} />, roles: ['admin', 'owner'], color: "text-blue-500" },
-  { label: 'Storage', href: '/admin/storage', icon: <StorageIcon size={18} />, roles: ['admin', 'owner'], color: "text-cyan-500" },
-  { label: 'Audit Logs', href: '/admin/audit', icon: <AuditLogsIcon size={18} />, roles: ['admin', 'owner'], color: "text-indigo-500" },
+  { label: 'Users', href: '/admin/users', icon: <UsersIcon size={16} />, roles: ['admin', 'owner'], color: "text-blue-500" },
+  { label: 'Storage', href: '/admin/storage', icon: <StorageIcon size={16} />, roles: ['admin', 'owner'], color: "text-cyan-500" },
+  { label: 'Audit Logs', href: '/admin/audit', icon: <AuditLogsIcon size={16} />, roles: ['admin', 'owner'], color: "text-indigo-500" },
 ];
 
 
@@ -73,13 +69,31 @@ const adminItems: NavItem[] = [
 export function Sidebar() {
   const location = useLocation();
   const { role, isAtLeast } = useAuth();
-  const { theme, setTheme } = useTheme();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(window.innerWidth <= 1280);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    
+    // Auto-collapse logic for document editor
+    const isDocumentEditor = location.pathname.startsWith('/documents/') && location.pathname !== '/documents';
+    
+    const handleResize = () => {
+      if (isDocumentEditor && window.innerWidth <= 1600) {
+        setIsCollapsed(true);
+      } else if (window.innerWidth <= 1280) {
+        setIsCollapsed(true);
+      } else if (window.innerWidth > 1600) {
+        setIsCollapsed(false);
+      }
+    };
+
+    // Initial check
+    handleResize();
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [location.pathname]);
 
   const filteredPrimary = primaryItems;
   const filteredAdminItems = adminItems.filter(item => {
@@ -97,7 +111,7 @@ export function Sidebar() {
       </div>
       {!isCollapsed && (
         <span className={cn(
-          'truncate transition-all duration-300 ml-3 text-sm whitespace-nowrap',
+          'truncate transition-all duration-300 ml-3 text-xs whitespace-nowrap',
           isActive && 'font-semibold'
         )}>
           {item.label}
@@ -125,14 +139,14 @@ export function Sidebar() {
 
       {/* Logo Section */}
       <div className={cn(
-        "flex items-center h-14 border-b border-sidebar-border/50 px-3",
-        isCollapsed ? "justify-center" : "justify-start gap-3"
+        "flex items-center h-11 border-b border-sidebar-border/50 px-3",
+        isCollapsed ? "justify-center" : "justify-start gap-2.5"
       )}>
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-sm border border-slate-200 shrink-0 overflow-hidden">
-          <img src="/favicon.svg" alt="DeckStore" className="h-5 w-5 object-contain" />
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white shadow-sm border border-slate-200 shrink-0 overflow-hidden">
+          <img src="/favicon.svg" alt="DeckStore" className="h-4 w-4 object-contain" />
         </div>
         {!isCollapsed && (
-          <span className="font-bold text-base tracking-tight text-foreground">
+          <span className="font-bold text-sm tracking-tight text-foreground">
             DeckStore
           </span>
         )}
@@ -150,7 +164,7 @@ export function Sidebar() {
                       <Link
                         to={item.href}
                         className={cn(
-                          'group flex items-center rounded-lg px-2.5 py-2 transition-all duration-200',
+                          'group flex items-center rounded-lg px-2.5 py-1.5 transition-all duration-200',
                           isActive
                             ? 'bg-primary/10 text-primary shadow-sm'
                             : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
@@ -190,7 +204,7 @@ export function Sidebar() {
                           <Link
                             to={item.href}
                             className={cn(
-                              'group flex items-center rounded-lg px-2.5 py-2 transition-all duration-200',
+                              'group flex items-center rounded-lg px-2.5 py-1.5 transition-all duration-200',
                               isActive
                                 ? 'bg-primary/10 text-primary shadow-sm'
                                 : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
@@ -214,67 +228,7 @@ export function Sidebar() {
         </div>
       </ScrollArea>
 
-      {/* Footer / Theme Toggle */}
-      <div className={cn(
-        "border-t border-sidebar-border/50 p-3",
-        isCollapsed ? "flex justify-center" : ""
-      )}>
-        {isCollapsed ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-sidebar-accent">
-                {mounted ? (
-                  theme === 'dark' ? <Moon className="h-4 w-4" /> : theme === 'light' ? <Sun className="h-4 w-4" /> : <Monitor className="h-4 w-4" />
-                ) : <Monitor className="h-4 w-4" />}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="right">
-              <DropdownMenuItem onClick={() => setTheme('light')}>Light</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme('dark')}>Dark</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme('system')}>System</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          <div className="flex items-center justify-between bg-sidebar-accent/50 rounded-lg p-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setTheme('light')}
-              className={cn(
-                "flex-1 h-6 rounded-md text-[10px] hover:bg-background transition-all",
-                theme === 'light' && "bg-background shadow-sm text-foreground"
-              )}
-            >
-              <Sun className="h-3 w-3 mr-1.5" />
-              Light
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setTheme('dark')}
-              className={cn(
-                "flex-1 h-6 rounded-md text-[10px] hover:bg-background transition-all",
-                theme === 'dark' && "bg-background shadow-sm text-foreground"
-              )}
-            >
-              <Moon className="h-3 w-3 mr-1.5" />
-              Dark
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setTheme('system')}
-              className={cn(
-                "h-6 w-6 rounded-md ml-1 hover:bg-background transition-all",
-                theme === 'system' && "bg-background shadow-sm text-foreground"
-              )}
-              title="System"
-            >
-              <Monitor className="h-3 w-3" />
-            </Button>
-          </div>
-        )}
-      </div>
+
     </div>
   );
 }

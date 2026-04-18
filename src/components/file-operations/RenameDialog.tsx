@@ -17,6 +17,7 @@ interface RenameDialogProps {
   onOpenChange: (open: boolean) => void;
   fileId?: string;
   folderId?: string;
+  documentId?: string;
   currentName: string;
   onRename: () => void;
 }
@@ -26,6 +27,7 @@ export function RenameDialog({
   onOpenChange,
   fileId,
   folderId,
+  documentId,
   currentName,
   onRename,
 }: RenameDialogProps) {
@@ -47,6 +49,9 @@ export function RenameDialog({
         await fileService.renameFile(fileId, name.trim());
       } else if (folderId) {
         await fileService.renameFolder(folderId, name.trim());
+      } else if (documentId) {
+        const { documentService } = await import('@/services/documentService');
+        await documentService.updateDocument(documentId, { name: name.trim() });
       }
       onRename();
       onOpenChange(false);
@@ -59,9 +64,9 @@ export function RenameDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rename {fileId ? 'File' : 'Folder'}</DialogTitle>
+          <DialogTitle>Rename {fileId ? 'File' : folderId ? 'Folder' : 'Document'}</DialogTitle>
           <DialogDescription>
-            Enter a new name for this {fileId ? 'file' : 'folder'}
+            Enter a new name for this {fileId ? 'file' : folderId ? 'folder' : 'document'}
           </DialogDescription>
         </DialogHeader>
 

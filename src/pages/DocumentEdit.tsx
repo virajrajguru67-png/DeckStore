@@ -26,6 +26,7 @@ import {
     AlignLeft,
     AlignCenter,
     AlignRight,
+    AlignJustify,
     ListOrdered,
     Quote,
     Undo,
@@ -53,7 +54,9 @@ import {
     Hash,
     MessageSquare,
     Video,
-    Bookmark
+    Bookmark,
+    Layers,
+    ChevronRight
 } from 'lucide-react';
 import {
     DropdownMenu,
@@ -61,6 +64,12 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { documentService } from '@/services/documentService';
 import { Document } from '@/types/document';
@@ -190,12 +199,38 @@ const GlobalFooterEditor = memo(({ content, onChange, pageNum, totalPages }: any
     );
 });
 
+const IconButtonWithTooltip = ({ icon: Icon, title, onClick, onMouseDown, className, active, iconClassName }: any) => (
+    <TooltipProvider delayDuration={400}>
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className={cn(
+                        "h-8 w-8 p-0 hover:bg-primary/10 transition-all rounded-md", 
+                        active && "bg-primary/10 text-primary",
+                        className
+                    )}
+                    onMouseDown={onMouseDown}
+                    onClick={onClick}
+                >
+                    <Icon className={cn("h-4 w-4", iconClassName)} />
+                </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-[10px] font-bold uppercase tracking-wider bg-popover/95 backdrop-blur-md border-border/40 shadow-xl">
+                {title}
+            </TooltipContent>
+        </Tooltip>
+    </TooltipProvider>
+);
+
 export default function DocumentEdit() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [docData, setDocData] = useState<Document | null>(null);
     const [loading, setLoading] = useState(true);
     const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
     const [pages, setPages] = useState<string[]>(['']);
     const [activePageIndex, setActivePageIndex] = useState(0);
     const [summary, setSummary] = useState<string | null>(null);
@@ -204,9 +239,13 @@ export default function DocumentEdit() {
     const [showHeader, setShowHeader] = useState(false);
     const [showFooter, setShowFooter] = useState(false);
     const [isHighlightMode, setIsHighlightMode] = useState(false);
+    const [globalHeader, setGlobalHeader] = useState('');
+    const [globalFooter, setGlobalFooter] = useState('');
+    const [showPageNumbers, setShowPageNumbers] = useState(false);
     const [activeHighlightColor, setActiveHighlightColor] = useState('#ffff00');
     const [activeFontColor, setActiveFontColor] = useState('#000000');
     const editorRefs = useRef<(HTMLDivElement | null)[]>([]);
+    const colorInputRef = useRef<HTMLInputElement>(null);
 
     const THEME_COLORS = [
         { name: 'White', hex: '#ffffff' }, { name: 'Black', hex: '#000000' }, { name: 'Light Gray', hex: '#e7e6e6' }, { name: 'Dark Blue', hex: '#44546a' }, { name: 'Blue', hex: '#4472c4' },
@@ -225,11 +264,18 @@ export default function DocumentEdit() {
                 if (doc) {
                     setDocData(doc);
                     setTitle(doc.name);
+                    setDescription(doc.description || '');
                     setSummary(doc.ai_summary || null);
 
                     let initialPages: string[] = [''];
+                    let header = '';
+                    let footer = '';
+
                     if (typeof doc.content === 'object' && doc.content !== null) {
                         const anyContent = doc.content as any;
+                        header = anyContent.header || '';
+                        footer = anyContent.footer || '';
+
                         if (anyContent.pages && Array.isArray(anyContent.pages)) {
                             initialPages = anyContent.pages;
                         } else {
@@ -239,6 +285,8 @@ export default function DocumentEdit() {
                     } else if (typeof doc.content === 'string') {
                         try {
                             const parsed = JSON.parse(doc.content);
+                            header = parsed.header || '';
+                            footer = parsed.footer || '';
                             if (parsed.pages) {
                                 initialPages = parsed.pages;
                             } else {
@@ -250,6 +298,10 @@ export default function DocumentEdit() {
                     }
 
                     setPages(initialPages.length > 0 ? initialPages : ['']);
+                    setGlobalHeader(header);
+                    setGlobalFooter(footer);
+                    if (header) setShowHeader(true);
+                    if (footer) setShowFooter(true);
                 } else {
                     toast.error('Document not found');
                     navigate('/documents');
@@ -275,10 +327,13 @@ export default function DocumentEdit() {
         try {
             await documentService.updateDocument(docData.id, {
                 name: title,
+                description: description,
                 content: {
                     pages: currentPages,
                     html: currentPages.join('<!-- page-break -->'),
-                    text: plainText
+                    text: plainText,
+                    header: globalHeader,
+                    footer: globalFooter
                 },
             });
             setPages(currentPages);
@@ -317,7 +372,7 @@ export default function DocumentEdit() {
         toast.success(`Page ${index + 1} removed`);
     };
 
-    const [activeStyles, setActiveStyles] = useState<{ [key: string]: boolean }>({});
+    const [activeStyles, setActiveStyles] = useState<{ [key: string]: any }>({});
     const [currentStyleLabel, setCurrentStyleLabel] = useState('Normal Text');
 
     const updateActiveStyles = () => {
@@ -331,6 +386,8 @@ export default function DocumentEdit() {
             justifyRight: document.queryCommandState('justifyRight'),
             insertUnorderedList: document.queryCommandState('insertUnorderedList'),
             insertOrderedList: document.queryCommandState('insertOrderedList'),
+            fontName: document.queryCommandValue('fontName')?.replace(/['"]/g, '').split(',')[0] || 'Inter',
+            fontSize: document.queryCommandValue('fontSize') || '3',
         };
         setActiveStyles(styles);
 
@@ -391,6 +448,29 @@ export default function DocumentEdit() {
         }
     };
 
+    const applyGradient = (gradient: string) => {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        
+        const range = selection.getRangeAt(0);
+        const selectedText = range.toString();
+        
+        if (!selectedText) {
+            toast.info("Please select some text first");
+            return;
+        }
+
+        const span = document.createElement('span');
+        span.style.background = gradient;
+        span.style.webkitBackgroundClip = 'text';
+        span.style.webkitTextFillColor = 'transparent';
+        span.style.display = 'inline-block';
+        span.textContent = selectedText;
+
+        range.deleteContents();
+        range.insertNode(span);
+    };
+
     const execCommand = (command: string, value: string = '') => {
         if (activePageIndex === -1) return;
 
@@ -400,16 +480,18 @@ export default function DocumentEdit() {
         // Force focus if lost
         editor.focus();
 
-        // Use a tick to ensure focus is established before command
-        setTimeout(() => {
-            // Some browsers prefer bracketed tags for formatBlock
-            const finalValue = (command === 'formatBlock' && !value.startsWith('<'))
-                ? `<${value}>`
-                : value;
+        // Enable modern CSS-based styling instead of deprecated HTML tags
+        document.execCommand('styleWithCSS', false, "true");
 
-            document.execCommand(command, false, finalValue);
-            updateActiveStyles();
-        }, 0);
+        // Some browsers prefer bracketed tags for formatBlock
+        const finalValue = (command === 'formatBlock' && !value.startsWith('<'))
+            ? `<${value}>`
+            : value;
+
+        document.execCommand(command, false, finalValue);
+        
+        // Update the toolbar states
+        updateActiveStyles();
     };
 
     const insertTable = () => {
@@ -575,7 +657,8 @@ export default function DocumentEdit() {
     if (!document) return null;
 
     return (
-        <DashboardLayout
+        <>
+            <DashboardLayout
             title={title}
             subtitle={`Editing ${pages.length} Page${pages.length > 1 ? 's' : ''}`}
             fullHeight
@@ -586,20 +669,30 @@ export default function DocumentEdit() {
                 </Button>
             }
             titleElement={
-                <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="h-4 w-4 text-primary shrink-0" />
-                    <Input
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        className="text-sm font-semibold bg-transparent border-none focus-visible:ring-0 px-0 h-auto w-full max-w-[200px]"
-                        placeholder="Document Title"
-                    />
+                <div className="flex items-center group relative min-w-0 max-w-[500px] py-1">
+                    <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-primary/5 mr-3 group-hover:bg-primary/10 transition-all shadow-sm border border-primary/10">
+                        <FileText className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                        <Input
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            className="text-lg font-bold bg-transparent border-none focus-visible:ring-0 px-0 h-7 w-full"
+                            placeholder="Untitled Document"
+                        />
+                        <Input
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            className="text-xs text-muted-foreground bg-transparent border-none focus-visible:ring-0 px-0 h-4 w-full"
+                            placeholder="Add description..."
+                        />
+                    </div>
                 </div>
             }
             rightAction={
                 <div className="flex items-center gap-3">
-                    <div className="hidden lg:block text-[10px] text-muted-foreground uppercase tracking-widest">
-                        {isSaving ? 'Saving...' : 'All changes saved'}
+                    <div className="hidden lg:flex items-center gap-2 group cursor-help">
+                        {/* Status remains in primary header for professional feel */}
                     </div>
                     <Button onClick={handleSave} disabled={isSaving} size="sm" className="h-8 shadow-sm">
                         {isSaving ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Save className="mr-2 h-3 w-3" />}
@@ -659,21 +752,54 @@ export default function DocumentEdit() {
                                     <div className="flex items-center gap-1">
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="outline" size="sm" className="h-7 w-32 px-2 justify-between text-[11px] font-medium bg-background/50 border-border/60">
-                                                    <span className="truncate">Inter</span>
+                                                <Button variant="ghost" size="sm" className="h-7 w-32 px-2 justify-between text-[11px] font-medium hover:bg-primary/5 transition-colors" onMouseDown={(e) => e.preventDefault()}>
+                                                    <span className="truncate">{activeStyles.fontName || 'Inter'}</span>
                                                     <ChevronDown className="h-3 w-3 opacity-50" />
                                                 </Button>
                                             </DropdownMenuTrigger>
-                                            <DropdownMenuContent className="w-48">
-                                                <DropdownMenuItem onMouseDown={(e) => { e.preventDefault(); execCommand('fontName', 'Inter'); }}>Inter</DropdownMenuItem>
-                                                <DropdownMenuItem onMouseDown={(e) => { e.preventDefault(); execCommand('fontName', 'serif'); }}>Serif</DropdownMenuItem>
-                                                <DropdownMenuItem onMouseDown={(e) => { e.preventDefault(); execCommand('fontName', 'monospace'); }}>Monospace</DropdownMenuItem>
+                                            <DropdownMenuContent className="w-56 max-h-[400px] overflow-y-auto bg-popover/95 backdrop-blur-md border-border/40 shadow-xl no-scrollbar">
+                                                <div className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider px-3 pt-2 pb-1 border-b border-border/10">Available Fonts</div>
+                                                {[
+                                                    { name: 'Inter', family: 'Inter, sans-serif' },
+                                                    { name: 'Arial', family: 'Arial, sans-serif' },
+                                                    { name: 'Helvetica', family: 'Helvetica, sans-serif' },
+                                                    { name: 'Montserrat', family: 'Montserrat, sans-serif' },
+                                                    { name: 'Poppins', family: 'Poppins, sans-serif' },
+                                                    { name: 'Roboto', family: 'Roboto, sans-serif' },
+                                                    { name: 'Open Sans', family: 'Open Sans, sans-serif' },
+                                                    { name: 'Verdana', family: 'Verdana, sans-serif' },
+                                                    { name: 'Georgia', family: 'Georgia, serif' },
+                                                    { name: 'Times New Roman', family: 'Times New Roman, serif' },
+                                                    { name: 'Playfair Display', family: 'Playfair Display, serif' },
+                                                    { name: 'Courier New', family: 'Courier New, monospace' },
+                                                    { name: 'Fira Code', family: 'Fira Code, monospace' },
+                                                    { name: 'Lucida Console', family: 'Lucida Console, monospace' },
+                                                    { name: 'Inconsolata', family: 'Inconsolata, monospace' },
+                                                ].map(font => (
+                                                    <DropdownMenuItem 
+                                                        key={font.name} 
+                                                        onMouseDown={(e) => { 
+                                                            e.preventDefault(); 
+                                                            execCommand('fontName', font.family); 
+                                                        }}
+                                                        style={{ fontFamily: font.family }}
+                                                        className={cn(
+                                                            "text-sm cursor-pointer py-2.5 px-3 flex items-center justify-between border-b border-border/5 last:border-0 hover:bg-primary/5 transition-colors group",
+                                                            (activeStyles.fontName === font.name || activeStyles.fontName?.includes(font.name)) && "bg-primary/10 text-primary font-semibold"
+                                                        )}
+                                                    >
+                                                        <span>{font.name}</span>
+                                                        {(activeStyles.fontName === font.name || activeStyles.fontName?.includes(font.name)) && (
+                                                            <div className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
+                                                        )}
+                                                    </DropdownMenuItem>
+                                                ))}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
 
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="outline" size="sm" className="h-7 w-12 px-2 bg-background/50 border-border/60 text-[11px]">11</Button>
+                                                <Button variant="ghost" size="sm" className="h-7 w-12 px-2 hover:bg-primary/5 text-[11px] transition-colors" onMouseDown={(e) => e.preventDefault()}>{activeStyles.fontSize === '1' ? '8' : activeStyles.fontSize === '2' ? '10' : activeStyles.fontSize === '3' ? '12' : activeStyles.fontSize === '4' ? '14' : activeStyles.fontSize === '5' ? '18' : activeStyles.fontSize === '6' ? '24' : '36'}</Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent className="w-16">
                                                 {[8, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72].map(sz => (
@@ -687,21 +813,19 @@ export default function DocumentEdit() {
                                             <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onMouseDown={(e) => { e.preventDefault(); execCommand('fontSize', '2'); }}><span className="text-[10px] font-bold uppercase">A<ArrowDown className="h-2 w-2 inline" /></span></Button>
                                         </div>
 
-                                        <div className="w-[1px] h-4 bg-border/40 mx-0.5" />
-                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Clear Formatting" onMouseDown={(e) => { e.preventDefault(); execCommand('removeFormat'); }}><Eraser className="h-3.5 w-3.5" /></Button>
                                     </div>
 
                                     {/* Font Bottom Row */}
                                     <div className="flex items-center gap-0.5">
-                                        <Button variant="ghost" size="sm" className={cn("h-6 w-6 p-0", activeStyles.bold && "bg-primary/20 text-primary")} onMouseDown={(e) => { e.preventDefault(); execCommand('bold'); }}><Bold className="h-3.5 w-3.5" /></Button>
-                                        <Button variant="ghost" size="sm" className={cn("h-6 w-6 p-0", activeStyles.italic && "bg-primary/20 text-primary")} onMouseDown={(e) => { e.preventDefault(); execCommand('italic'); }}><Italic className="h-3.5 w-3.5" /></Button>
-                                        <Button variant="ghost" size="sm" className={cn("h-6 w-6 p-0", activeStyles.underline && "bg-primary/20 text-primary")} onMouseDown={(e) => { e.preventDefault(); execCommand('underline'); }}><Underline className="h-3.5 w-3.5" /></Button>
-                                        <Button variant="ghost" size="sm" className={cn("h-6 w-6 p-0", activeStyles.strikeThrough && "bg-primary/20 text-primary")} onMouseDown={(e) => { e.preventDefault(); execCommand('strikeThrough'); }}><Strikethrough className="h-3.5 w-3.5" /></Button>
+                                        <IconButtonWithTooltip icon={Bold} title="Bold (Ctrl+B)" active={activeStyles.bold} onMouseDown={(e: any) => { e.preventDefault(); execCommand('bold'); }} className="h-6 w-6" />
+                                        <IconButtonWithTooltip icon={Italic} title="Italic (Ctrl+I)" active={activeStyles.italic} onMouseDown={(e: any) => { e.preventDefault(); execCommand('italic'); }} className="h-6 w-6" />
+                                        <IconButtonWithTooltip icon={Underline} title="Underline (Ctrl+U)" active={activeStyles.underline} onMouseDown={(e: any) => { e.preventDefault(); execCommand('underline'); }} className="h-6 w-6" />
+                                        <IconButtonWithTooltip icon={Strikethrough} title="Strikethrough" active={activeStyles.strikeThrough} onMouseDown={(e: any) => { e.preventDefault(); execCommand('strikeThrough'); }} className="h-6 w-6" />
+                                        <IconButtonWithTooltip icon={Eraser} title="Clear Formatting" onMouseDown={(e: any) => { e.preventDefault(); execCommand('removeFormat'); }} className="h-6 w-6" />
 
                                         <div className="w-[1px] h-4 bg-border/40 mx-0.5" />
 
-                                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onMouseDown={(e) => { e.preventDefault(); execCommand('subscript'); }}><span className="text-[10px]">X₂</span></Button>
-                                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onMouseDown={(e) => { e.preventDefault(); execCommand('superscript'); }}><span className="text-[10px]">X²</span></Button>
+
 
                                         <div className="w-[1px] h-4 bg-border/40 mx-0.5" />
 
@@ -796,19 +920,62 @@ export default function DocumentEdit() {
                                                     
                                                     {/* Utilities */}
                                                     <div className="flex flex-col gap-1">
-                                                        <div className="flex items-center gap-2 p-1.5 hover:bg-accent rounded-md cursor-pointer text-xs group transition-colors">
+                                                        <div 
+                                                            className="flex items-center gap-2 p-1.5 hover:bg-accent rounded-md cursor-pointer text-xs group transition-colors relative"
+                                                            onMouseDown={(e) => {
+                                                                e.preventDefault();
+                                                                colorInputRef.current?.click();
+                                                            }}
+                                                        >
                                                             <div className="h-5 w-5 flex items-center justify-center border border-border/60 bg-background rounded-sm shadow-sm group-hover:border-primary/40">
                                                                 <Palette className="h-3 w-3" />
                                                             </div>
                                                             <span>More Colors...</span>
+                                                            <input 
+                                                                type="color" 
+                                                                ref={colorInputRef} 
+                                                                className="absolute -bottom-1 left-0 w-0 h-0 opacity-0 pointer-events-none"
+                                                                onChange={(e) => {
+                                                                    const color = e.target.value;
+                                                                    setActiveFontColor(color);
+                                                                    execCommand('foreColor', color);
+                                                                }}
+                                                            />
                                                         </div>
-                                                        <div className="flex items-center gap-2 p-1.5 hover:bg-accent rounded-md cursor-pointer text-xs group transition-colors">
-                                                            <div className="h-5 w-5 flex items-center justify-center border border-border/60 bg-background rounded-sm shadow-sm group-hover:border-primary/40">
-                                                                <Layers className="h-3 w-3" />
-                                                            </div>
-                                                            <span>Gradient</span>
-                                                            <ChevronRight className="h-3 w-3 ml-auto opacity-50" />
-                                                        </div>
+
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <div className="flex items-center gap-2 p-1.5 hover:bg-accent rounded-md cursor-pointer text-xs group transition-colors">
+                                                                    <div className="h-5 w-5 flex items-center justify-center border border-border/60 bg-background rounded-sm shadow-sm group-hover:border-primary/40">
+                                                                        <Layers className="h-3 w-3" />
+                                                                    </div>
+                                                                    <span>Gradient</span>
+                                                                    <ChevronRight className="h-3 w-3 ml-auto opacity-50" />
+                                                                </div>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent side="right" className="w-48 p-2 bg-popover/95 backdrop-blur-md border-border/40 shadow-xl">
+                                                                <div className="text-[10px] font-bold text-muted-foreground mb-2 uppercase tracking-wider px-1">Gradients</div>
+                                                                {[
+                                                                    { name: 'Sunset', value: 'linear-gradient(to right, #ff5f6d, #ffc371)' },
+                                                                    { name: 'Ocean', value: 'linear-gradient(to right, #00c6ff, #0072ff)' },
+                                                                    { name: 'Lush', value: 'linear-gradient(to right, #a8e063, #56ab2f)' },
+                                                                    { name: 'Purple Dream', value: 'linear-gradient(to right, #8e2de2, #4a00e0)' },
+                                                                    { name: 'Fire', value: 'linear-gradient(to right, #f83600, #f9d423)' }
+                                                                ].map(g => (
+                                                                    <DropdownMenuItem 
+                                                                        key={g.name}
+                                                                        onMouseDown={(e) => {
+                                                                            e.preventDefault();
+                                                                            applyGradient(g.value);
+                                                                        }}
+                                                                        className="gap-2 cursor-pointer"
+                                                                    >
+                                                                        <div className="h-4 w-4 rounded-full" style={{ background: g.value }} />
+                                                                        <span>{g.name}</span>
+                                                                    </DropdownMenuItem>
+                                                                ))}
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
                                                     </div>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
@@ -920,24 +1087,115 @@ export default function DocumentEdit() {
                                     </div>
                                 </div>
                             </div>
-
                             {/* Paragraph Group */}
                             <div className="flex flex-col border-r border-border/40 pr-3 mr-3 pb-2">
                                 <div className="flex flex-col gap-1.5 mt-1">
-                                    {/* Paragraph Top Row */}
+                                    {/* Paragraph Top Row: Consolidated List Dropdown */}
                                     <div className="flex items-center gap-0.5">
-                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onMouseDown={(e) => { e.preventDefault(); execCommand('insertUnorderedList'); }}><List className="h-3.5 w-3.5" /></Button>
-                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onMouseDown={(e) => { e.preventDefault(); execCommand('insertOrderedList'); }}><ListOrdered className="h-3.5 w-3.5" /></Button>
-                                        <div className="w-[1px] h-4 bg-border/40 mx-0.5" />
-                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onMouseDown={(e) => { e.preventDefault(); execCommand('outdent'); }}><AlignLeft className="h-3.5 w-3.5 rotate-180" /></Button>
-                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onMouseDown={(e) => { e.preventDefault(); execCommand('indent'); }}><AlignLeft className="h-3.5 w-3.5" /></Button>
+                                    <div className="flex items-center gap-0 rounded-md overflow-hidden transition-colors">
+                                        <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            className={cn("h-7 px-1.5 hover:bg-primary/5 border-r border-border/40 rounded-none", (activeStyles.insertUnorderedList || activeStyles.insertOrderedList) && "bg-primary/10 text-primary")} 
+                                            title="List"
+                                            onMouseDown={(e) => { 
+                                                e.preventDefault(); 
+                                                execCommand(activeStyles.insertOrderedList ? 'insertOrderedList' : 'insertUnorderedList'); 
+                                            }}
+                                        >
+                                            {activeStyles.insertOrderedList ? <ListOrdered className="h-3.5 w-3.5" /> : <List className="h-3.5 w-3.5" />}
+                                        </Button>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="sm" className="h-7 w-4 p-0 hover:bg-primary/5 rounded-none" onMouseDown={(e) => e.preventDefault()}>
+                                                    <ChevronDown className="h-2 w-2 opacity-50" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent className="w-48 p-1 bg-popover/95 backdrop-blur-md border-border/40 shadow-xl">
+                                                <div className="text-[10px] font-bold text-muted-foreground px-2 py-1.5 uppercase tracking-wider border-b border-border/10 mb-1">List Style</div>
+                                                <DropdownMenuItem onMouseDown={(e) => { e.preventDefault(); execCommand('insertUnorderedList'); }} className={cn("gap-2 py-2 cursor-pointer transition-colors", activeStyles.insertUnorderedList && "bg-primary/10 text-primary")}>
+                                                    <List className="h-4 w-4" />
+                                                    <span className="flex-1">Bulleted List</span>
+                                                    {activeStyles.insertUnorderedList && <div className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onMouseDown={(e) => { e.preventDefault(); execCommand('insertOrderedList'); }} className={cn("gap-2 py-2 cursor-pointer transition-colors", activeStyles.insertOrderedList && "bg-primary/10 text-primary")}>
+                                                    <ListOrdered className="h-4 w-4" />
+                                                    <span className="flex-1">Numbered List</span>
+                                                    {activeStyles.insertOrderedList && <div className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
                                     </div>
-                                    {/* Paragraph Bottom Row */}
+
+                                        <div className="w-[1px] h-4 bg-border/40 mx-0.5" />
+                                        
+                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Decrease Indent" onMouseDown={(e) => { e.preventDefault(); execCommand('outdent'); }}>
+                                            <AlignLeft className="h-3.5 w-3.5 rotate-180" />
+                                        </Button>
+                                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Increase Indent" onMouseDown={(e) => { e.preventDefault(); execCommand('indent'); }}>
+                                            <AlignLeft className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </div>
+
+                                    {/* Paragraph Bottom Row: Consolidated Alignment Dropdown */}
                                     <div className="flex items-center gap-0.5">
-                                        <Button variant="ghost" size="sm" className={cn("h-6 w-6 p-0", activeStyles.justifyLeft && "bg-primary/20 text-primary")} onMouseDown={(e) => { e.preventDefault(); execCommand('justifyLeft'); }}><AlignLeft className="h-3.5 w-3.5" /></Button>
-                                        <Button variant="ghost" size="sm" className={cn("h-6 w-6 p-0", activeStyles.justifyCenter && "bg-primary/20 text-primary")} onMouseDown={(e) => { e.preventDefault(); execCommand('justifyCenter'); }}><AlignCenter className="h-3.5 w-3.5" /></Button>
-                                        <Button variant="ghost" size="sm" className={cn("h-6 w-6 p-0", activeStyles.justifyRight && "bg-primary/20 text-primary")} onMouseDown={(e) => { e.preventDefault(); execCommand('justifyRight'); }}><AlignRight className="h-3.5 w-3.5" /></Button>
-                                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onMouseDown={(e) => { e.preventDefault(); execCommand('justifyFull'); }}><Search className="h-3.5 w-3.5" /></Button> {/* Approximate for justify */}
+                                    <div className="flex items-center gap-0 rounded-md overflow-hidden transition-colors">
+                                        <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            className="h-7 px-1.5 hover:bg-primary/5 border-r border-border/40 rounded-none" 
+                                            title="Alignment"
+                                            onMouseDown={(e) => { 
+                                                e.preventDefault(); 
+                                                // Cycle through alignments or just trigger current
+                                                if (activeStyles.justifyCenter) execCommand('justifyCenter');
+                                                else if (activeStyles.justifyRight) execCommand('justifyRight');
+                                                else if (activeStyles.justifyFull) execCommand('justifyFull');
+                                                else execCommand('justifyLeft');
+                                            }}
+                                        >
+                                            {activeStyles.justifyCenter ? <AlignCenter className="h-3.5 w-3.5" /> : 
+                                             activeStyles.justifyRight ? <AlignRight className="h-3.5 w-3.5" /> :
+                                             activeStyles.justifyFull ? <AlignJustify className="h-3.5 w-3.5" /> :
+                                             <AlignLeft className="h-3.5 w-3.5" />}
+                                        </Button>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="sm" className="h-7 w-4 p-0 hover:bg-primary/5 rounded-none" onMouseDown={(e) => e.preventDefault()}>
+                                                    <ChevronDown className="h-2 w-2 opacity-50" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent className="w-52 p-1 bg-popover/95 backdrop-blur-md border-border/40 shadow-xl">
+                                                <div className="text-[10px] font-bold text-muted-foreground px-2 py-1.5 uppercase tracking-wider border-b border-border/10 mb-1">Text Alignment</div>
+                                                <DropdownMenuItem onMouseDown={(e) => { e.preventDefault(); execCommand('justifyLeft'); }} className={cn("gap-2 py-2 cursor-pointer transition-colors", activeStyles.justifyLeft && "bg-primary/10 text-primary")}>
+                                                    <AlignLeft className="h-4 w-4" />
+                                                    <span className="flex-1">Align Left</span>
+                                                    {activeStyles.justifyLeft && <div className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onMouseDown={(e) => { e.preventDefault(); execCommand('justifyCenter'); }} className={cn("gap-2 py-2 cursor-pointer transition-colors", activeStyles.justifyCenter && "bg-primary/10 text-primary")}>
+                                                    <AlignCenter className="h-4 w-4" />
+                                                    <span className="flex-1">Align Center</span>
+                                                    {activeStyles.justifyCenter && <div className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onMouseDown={(e) => { e.preventDefault(); execCommand('justifyRight'); }} className={cn("gap-2 py-2 cursor-pointer transition-colors", activeStyles.justifyRight && "bg-primary/10 text-primary")}>
+                                                    <AlignRight className="h-4 w-4" />
+                                                    <span className="flex-1">Align Right</span>
+                                                    {activeStyles.justifyRight && <div className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onMouseDown={(e) => { e.preventDefault(); execCommand('justifyFull'); }} className={cn("gap-2 py-2 cursor-pointer transition-colors", activeStyles.justifyFull && "bg-primary/10 text-primary")}>
+                                                    <AlignJustify className="h-4 w-4" />
+                                                    <span className="flex-1">Justify</span>
+                                                    {activeStyles.justifyFull && <div className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
+                                        
+                                        <div className="w-[1px] h-4 bg-border/40 mx-0.5" />
+                                        
+                                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" title="Line Spacing (Coming Soon)" onClick={(e) => { e.preventDefault(); toast.info("Line spacing options coming soon"); }}>
+                                            <GalleryVertical className="h-3.5 w-3.5 opacity-60" />
+                                        </Button>
                                     </div>
                                 </div>
                             </div>
@@ -946,35 +1204,20 @@ export default function DocumentEdit() {
                             <div className="flex flex-col border-r border-border/40 pr-3 mr-3 pb-2 w-[70px]">
                                 <div className="mt-1 flex justify-center h-full items-center">
                                     <Button variant="ghost" className="flex flex-col items-center justify-center gap-1 h-[82px] w-full hover:bg-primary/5 group px-0" onClick={(e) => { e.preventDefault(); insertTable(); }}>
-                                        <Table className="h-12 w-12 text-blue-500 group-hover:scale-110 transition-transform" />
+                                        <Table className="h-10 w-10 text-blue-500 group-hover:scale-110 transition-transform" />
                                         <span className="text-[10px] font-medium">Table</span>
                                     </Button>
                                 </div>
                             </div>
-
                             {/* Illustrations Group */}
-                            <div className="flex flex-col border-r border-border/40 pr-3 mr-3 pb-2 w-[220px]">
-                                <div className="grid grid-cols-3 gap-1 mt-1 px-1">
-                                    <Button variant="ghost" size="sm" className="h-auto min-h-[40px] py-1 flex-col gap-0.5 hover:bg-primary/5 transition-all border border-border/40 rounded-sm bg-background/20 shadow-none hover:border-primary/30" onClick={(e) => { e.preventDefault(); insertImage(); }}>
-                                        <ImageIcon className="h-4 w-4 text-foreground/80 drop-shadow-sm" />
-                                        <span className="text-[7px] font-bold tracking-tighter uppercase text-muted-foreground/80 leading-none">Pictures</span>
-                                    </Button>
-                                    <Button variant="ghost" size="sm" className="h-auto min-h-[40px] py-1 flex-col gap-0.5 hover:bg-primary/5 transition-all border border-border/40 rounded-sm bg-background/20 shadow-none hover:border-primary/30" onClick={(e) => { e.preventDefault(); toast.info("Shapes tool coming soon"); }}>
-                                        <Shapes className="h-4 w-4 text-foreground/80 drop-shadow-sm" />
-                                        <span className="text-[7px] font-bold tracking-tighter uppercase text-muted-foreground/80 leading-none">Shapes</span>
-                                    </Button>
-                                    <Button variant="ghost" size="sm" className="h-auto min-h-[40px] py-1 flex-col gap-0.5 hover:bg-primary/5 transition-all border border-border/40 rounded-sm bg-background/20 shadow-none hover:border-primary/30" onClick={(e) => { e.preventDefault(); toast.info("Icons library coming soon"); }}>
-                                        <Sparkles className="h-4 w-4 text-foreground/80 drop-shadow-sm" />
-                                        <span className="text-[7px] font-bold tracking-tighter uppercase text-muted-foreground/80 leading-none">Icons</span>
-                                    </Button>
-                                    <Button variant="ghost" size="sm" className="h-auto min-h-[40px] py-1 flex-col gap-0.5 hover:bg-primary/5 transition-all border border-border/40 rounded-sm bg-background/20 shadow-none hover:border-primary/30" onClick={(e) => { e.preventDefault(); toast.info("3D Models coming soon"); }}>
-                                        <Box className="h-4 w-4 text-foreground/80 drop-shadow-sm" />
-                                        <span className="text-[7px] font-bold tracking-tighter uppercase text-muted-foreground/80 leading-none">3D Models</span>
-                                    </Button>
-                                    <Button variant="ghost" size="sm" className="h-auto min-h-[40px] py-1 flex-col gap-0.5 hover:bg-primary/5 transition-all border border-border/40 rounded-sm bg-background/20 shadow-none hover:border-primary/30 col-span-2" onClick={(e) => { e.preventDefault(); toast.info("Chart engine coming soon"); }}>
-                                        <BarChart className="h-4 w-4 text-foreground/80 drop-shadow-sm" />
-                                        <span className="text-[7px] font-bold tracking-tighter uppercase text-muted-foreground/80 leading-none">Smart Chart</span>
-                                    </Button>
+                            <div className="flex flex-col border-r border-border/40 pr-3 mr-3 pb-2 w-[160px]">
+                                <div className="grid grid-cols-3 gap-1.5 mt-1 px-1 flex-1 h-full items-center">
+                                    <IconButtonWithTooltip icon={ImageIcon} title="Insert Picture" onClick={(e: any) => { e.preventDefault(); insertImage(); }} />
+                                    <IconButtonWithTooltip icon={Shapes} title="Insert Shapes" onClick={(e: any) => { e.preventDefault(); toast.info("Shapes tool coming soon"); }} />
+                                    <IconButtonWithTooltip icon={Sparkles} title="Icons Library" onClick={(e: any) => { e.preventDefault(); toast.info("Icons library coming soon"); }} />
+                                    <IconButtonWithTooltip icon={Box} title="3D Models" onClick={(e: any) => { e.preventDefault(); toast.info("3D Models coming soon"); }} />
+                                    <IconButtonWithTooltip icon={Camera} title="Take Screenshot" onClick={(e: any) => { e.preventDefault(); toast.info("Screenshot tool coming soon"); }} />
+                                    <IconButtonWithTooltip icon={BarChart} title="Smart Chart" onClick={(e: any) => { e.preventDefault(); toast.info("Chart engine coming soon"); }} />
                                 </div>
                             </div>
 
@@ -1006,7 +1249,12 @@ export default function DocumentEdit() {
                                     >
                                         <GalleryVertical className="h-3.5 w-3.5 rotate-180" /> Footer
                                     </Button>
-                                    <Button variant="ghost" size="sm" className="h-7 px-2 justify-start gap-2 hover:bg-primary/5 text-[10px] font-normal" onClick={(e) => { e.preventDefault(); toast.info("Page numbers formatted automatically"); }}>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        className={cn("h-7 px-2 justify-start gap-2 hover:bg-primary/5 text-[10px] font-normal", showPageNumbers && "bg-primary/10 text-primary")} 
+                                        onMouseDown={(e) => { e.preventDefault(); setShowPageNumbers(!showPageNumbers); }}
+                                    >
                                         <Hash className="h-3.5 w-3.5 text-blue-500" /> Page Number
                                     </Button>
                                 </div>
@@ -1019,8 +1267,8 @@ export default function DocumentEdit() {
                                     <Plus className="h-3 w-3 mr-1" /> New Page
                                 </Button>
                                 <div className="flex gap-1 justify-center">
-                                    <Button variant="ghost" size="icon" className="h-7 w-7" onMouseDown={(e) => { e.preventDefault(); execCommand('undo'); }}><Undo className="h-3.5 w-3.5" /></Button>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7" onMouseDown={(e) => { e.preventDefault(); execCommand('redo'); }}><Redo className="h-3.5 w-3.5" /></Button>
+                                    <IconButtonWithTooltip icon={Undo} title="Undo (Ctrl+Z)" onMouseDown={(e: any) => { e.preventDefault(); execCommand('undo'); }} className="h-7 w-7" />
+                                    <IconButtonWithTooltip icon={Redo} title="Redo (Ctrl+Y)" onMouseDown={(e: any) => { e.preventDefault(); execCommand('redo'); }} className="h-7 w-7" />
                                 </div>
                             </div>
                         </div>
@@ -1093,6 +1341,12 @@ export default function DocumentEdit() {
                                                 pageNum={idx + 1}
                                                 totalPages={pages.length}
                                             />
+                                        )}
+
+                                        {showPageNumbers && (
+                                            <div className="absolute bottom-6 right-8 text-[10px] font-bold text-muted-foreground/30 select-none tracking-[0.2em] uppercase italic pointer-events-none">
+                                                Page {idx + 1} of {pages.length}
+                                            </div>
                                         )}
 
                                         {/* Page Info Overlay */}
@@ -1190,5 +1444,6 @@ export default function DocumentEdit() {
                 </div>
             </div>
         </DashboardLayout>
+        </>
     );
 }

@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { fileService } from '@/services/fileService';
+import { Folder } from '@/types/file';
 import { Folder as FolderIcon, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -17,6 +18,7 @@ interface MoveFileDialogProps {
   onOpenChange: (open: boolean) => void;
   fileId?: string;
   folderId?: string;
+  documentId?: string;
   onMove: () => void;
 }
 
@@ -25,6 +27,7 @@ export function MoveFileDialog({
   onOpenChange,
   fileId,
   folderId,
+  documentId,
   onMove,
 }: MoveFileDialogProps) {
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -60,6 +63,9 @@ export function MoveFileDialog({
         await fileService.moveFile(fileId, selectedFolderId);
       } else if (folderId) {
         await fileService.moveFolder(folderId, selectedFolderId);
+      } else if (documentId) {
+        const { documentService } = await import('@/services/documentService');
+        await documentService.updateDocument(documentId, { folder_id: selectedFolderId });
       }
       onMove();
       onOpenChange(false);
@@ -80,7 +86,7 @@ export function MoveFileDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Move {fileId ? 'File' : 'Folder'}</DialogTitle>
+          <DialogTitle>Move {fileId ? 'File' : folderId ? 'Folder' : 'Document'}</DialogTitle>
           <DialogDescription>
             Select a destination folder or choose root level
           </DialogDescription>

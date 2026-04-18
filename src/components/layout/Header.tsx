@@ -44,7 +44,7 @@ export function Header({ title, subtitle, leftAction, rightAction, titleElement 
 
   const getPageIcon = () => {
     const path = location.pathname;
-    return <FolderOpen className="h-5 w-5" />;
+    return <FolderOpen className="h-4 w-4" />;
   };
 
   const handleSignOut = async () => {
@@ -54,8 +54,8 @@ export function Header({ title, subtitle, leftAction, rightAction, titleElement 
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-14 items-center justify-between px-4 gap-4">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+      <div className="flex h-11 items-center justify-between px-4 gap-4">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
           {leftAction ? (
             leftAction
           ) : (
@@ -69,11 +69,11 @@ export function Header({ title, subtitle, leftAction, rightAction, titleElement 
               titleElement
             ) : (
               <>
-                <h1 className="text-sm font-semibold text-foreground truncate">
+                <h1 className="text-xs font-semibold text-foreground truncate">
                   {title}
                 </h1>
                 {subtitle && (
-                  <p className="text-xs text-muted-foreground truncate">
+                  <p className="text-[10px] text-muted-foreground truncate">
                     {subtitle}
                   </p>
                 )}
@@ -111,9 +111,9 @@ export function Header({ title, subtitle, leftAction, rightAction, titleElement 
               <Button
                 variant="ghost"
                 size="icon"
-                className="relative h-8 w-8 hover:bg-accent transition-colors duration-100"
+                className="relative h-7 w-7 hover:bg-accent transition-colors duration-100"
               >
-                <Bell className="h-4 w-4" />
+                <Bell className="h-3.5 w-3.5" />
                 {unreadCount > 0 && (
                   <Badge
                     variant="destructive"
@@ -159,14 +159,14 @@ export function Header({ title, subtitle, leftAction, rightAction, titleElement 
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center gap-2 h-8 px-2">
-                <Avatar className="h-6 w-6">
+              <Button variant="ghost" className="flex items-center gap-1.5 h-7 px-1.5">
+                <Avatar className="h-5 w-5">
                   <AvatarImage src={profile?.avatar_url || undefined} />
-                  <AvatarFallback className="text-xs">
+                  <AvatarFallback className="text-[10px]">
                     {profile?.full_name?.charAt(0).toUpperCase() || <User className="h-3 w-3" />}
                   </AvatarFallback>
                 </Avatar>
-                <span className="hidden md:block text-sm">{profile?.full_name || 'User'}</span>
+                <span className="hidden md:block text-xs">{profile?.full_name || 'User'}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">

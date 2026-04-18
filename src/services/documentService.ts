@@ -1,6 +1,7 @@
 import { apiService } from './apiService';
 import { CreateDocumentInput, UpdateDocumentInput } from '@/types/document';
 import { toast } from 'sonner';
+import { activityService } from './activityService';
 
 export const documentService = {
   async extractText(fileId: string): Promise<string> {
@@ -52,6 +53,7 @@ export const documentService = {
     try {
       await apiService.post(`/documents/${id}/delete`, {});
       toast.success('Document deleted');
+      await activityService.logActivity('DELETE', 'DOCUMENT', id);
       return { success: true };
     } catch (error) {
       console.error('deleteDocument error:', error);
@@ -64,6 +66,7 @@ export const documentService = {
     try {
       const data = await apiService.post('/documents', input);
       toast.success('Document created successfully');
+      await activityService.logActivity('CREATE', 'DOCUMENT', data.id, { title: input.name });
       return data;
     } catch (error) {
       console.error('createDocument error:', error);
@@ -77,6 +80,7 @@ export const documentService = {
     try {
       const data = await apiService.post(`/documents/${id}`, input);
       toast.success('Document updated successfully');
+      await activityService.logActivity('UPDATE', 'DOCUMENT', id);
       return data;
     } catch (error) {
       console.error('updateDocument error:', error);
@@ -118,6 +122,7 @@ export const documentService = {
   async restoreDocument(id: string): Promise<boolean> {
     try {
       await apiService.post(`/documents/${id}/restore`, {});
+      await activityService.logActivity('RESTORE', 'DOCUMENT', id);
       return true;
     } catch (error) {
       console.error('restoreDocument error:', error);
