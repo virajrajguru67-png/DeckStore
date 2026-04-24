@@ -54,6 +54,7 @@ export const fileService = {
         path: `/${name}` 
       });
       toast.success('Folder created');
+      await activityService.logActivity('CREATE', 'FOLDER', data.id, { name });
       return data;
     } catch (error) {
       console.error('createFolder error:', error);
@@ -66,6 +67,7 @@ export const fileService = {
     try {
       await apiService.post(`/files/${fileId}/delete`, {});
       toast.success('File moved to trash');
+      await activityService.logActivity('DELETE', 'FILE', fileId);
       return true;
     } catch (error) {
       console.error('deleteFile error:', error);
@@ -78,6 +80,7 @@ export const fileService = {
     try {
       await apiService.post(`/folders/${folderId}/delete`, {});
       toast.success('Folder moved to trash');
+      await activityService.logActivity('DELETE', 'FOLDER', folderId);
       return true;
     } catch (error) {
       console.error('deleteFolder error:', error);
@@ -90,6 +93,7 @@ export const fileService = {
     try {
       await apiService.post(`/files/${fileId}/rename`, { name: newName });
       toast.success('File renamed');
+      await activityService.logActivity('RENAME', 'FILE', fileId, { newName });
       return true;
     } catch (error) {
       console.error('renameFile error:', error);
@@ -102,6 +106,7 @@ export const fileService = {
     try {
       await apiService.post(`/folders/${folderId}/rename`, { name: newName });
       toast.success('Folder renamed');
+      await activityService.logActivity('RENAME', 'FOLDER', folderId, { newName });
       return true;
     } catch (error) {
       console.error('renameFolder error:', error);
@@ -158,6 +163,7 @@ export const fileService = {
     try {
       await apiService.post(`/files/${fileId}/restore`, {});
       toast.success('File restored');
+      await activityService.logActivity('RESTORE', 'FILE', fileId);
       return true;
     } catch (error) {
       console.error('restoreFile error:', error);
@@ -169,6 +175,7 @@ export const fileService = {
     try {
       await apiService.post(`/folders/${folderId}/restore`, {});
       toast.success('Folder restored');
+      await activityService.logActivity('RESTORE', 'FOLDER', folderId);
       return true;
     } catch (error) {
       console.error('restoreFolder error:', error);
@@ -276,6 +283,48 @@ export const fileService = {
     } catch (error) {
       console.error('getUserProfile error:', error);
       return null;
+    }
+  },
+
+  async getAdminUserFiles(userId: string): Promise<File[]> {
+    try {
+      return await apiService.get(`/admin/files?userId=${userId}`);
+    } catch (error) {
+      console.error('getAdminUserFiles error:', error);
+      return [];
+    }
+  },
+
+  async getAdminUserFolders(userId: string): Promise<Folder[]> {
+    try {
+      return await apiService.get(`/admin/folders?userId=${userId}`);
+    } catch (error) {
+      console.error('getAdminUserFolders error:', error);
+      return [];
+    }
+  },
+
+  async moveFile(fileId: string, targetFolderId: string | null): Promise<boolean> {
+    try {
+      await apiService.post(`/files/${fileId}/move`, { targetFolderId });
+      toast.success('File moved');
+      await activityService.logActivity('MOVE', 'FILE', fileId, { targetFolderId });
+      return true;
+    } catch (error) {
+      console.error('moveFile error:', error);
+      return false;
+    }
+  },
+
+  async moveFolder(folderId: string, targetFolderId: string | null): Promise<boolean> {
+    try {
+      await apiService.post(`/folders/${folderId}/move`, { targetFolderId });
+      toast.success('Folder moved');
+      await activityService.logActivity('MOVE', 'FOLDER', folderId, { targetFolderId });
+      return true;
+    } catch (error) {
+      console.error('moveFolder error:', error);
+      return false;
     }
   }
 };

@@ -145,14 +145,14 @@ export function ChatPanel({ documentTitle, documentContent, onApplyToDocument }:
                 <div className="flex items-center gap-2">
                     {isCloudAI ? <BrainCircuit className="h-3.5 w-3.5 text-indigo-500" /> : <Sparkles className="h-3.5 w-3.5 text-primary" />}
                     <span className="text-xs font-semibold">
-                        {isCloudAI ? "DeckStore AI " : "DeckStore Local Intelligence"}
+                        {isCloudAI ? "DeckStore AI " : "DeckStore Assistant"}
                     </span>
                 </div>
                 <div className={cn(
                     "text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider",
                     isCloudAI ? "bg-indigo-500/10 text-indigo-500" : "bg-primary/10 text-primary"
                 )}>
-                    {isCloudAI ? "Agent" : "Local"}
+                    {isCloudAI ? "Agent" : "Agent"}
                 </div>
             </div>
 
@@ -220,7 +220,7 @@ export function ChatPanel({ documentTitle, documentContent, onApplyToDocument }:
                     <Input
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        placeholder={isCloudAI ? "Ask anything about document..." : "Ask locally about document..."}
+                        placeholder={isCloudAI ? "Ask anything about document..." : "Ask anything about document..."}
                         className="rounded-xl bg-background border-border/60 pr-10 text-xs h-10 shadow-sm focus-visible:ring-primary/20 transition-all"
                         disabled={isLoading}
                     />

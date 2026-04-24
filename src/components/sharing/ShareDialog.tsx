@@ -21,7 +21,7 @@ import { useQueryClient } from '@tanstack/react-query';
 interface ShareDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  resourceType: 'file' | 'folder';
+  resourceType: 'file' | 'folder' | 'document';
   resourceId: string;
 }
 
@@ -87,7 +87,7 @@ export function ShareDialog({
       );
 
       if (share?.link_token) {
-        const url = shareService.getShareUrl(share.link_token);
+        const url = shareService.getShareUrl(share);
         setShareLink(url);
         toast.success('Share link created');
       }
@@ -107,7 +107,7 @@ export function ShareDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Share {resourceType === 'file' ? 'File' : 'Folder'}</DialogTitle>
+          <DialogTitle>Share {resourceType === 'file' ? 'File' : resourceType === 'folder' ? 'Folder' : 'Document'}</DialogTitle>
           <DialogDescription>
             Share with team members or create a shareable link
           </DialogDescription>

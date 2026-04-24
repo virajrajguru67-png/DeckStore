@@ -587,6 +587,24 @@ app.get('/api/storage/all-quotas', authenticateToken, isAdmin, async (req, res) 
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+app.get('/api/admin/files', authenticateToken, isAdmin, async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  try {
+    const [rows] = await pool.query('SELECT * FROM files WHERE owner_id = ? AND deleted_at IS NULL', [userId]);
+    res.json(rows);
+  } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+app.get('/api/admin/folders', authenticateToken, isAdmin, async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  try {
+    const [rows] = await pool.query('SELECT * FROM folders WHERE owner_id = ? AND deleted_at IS NULL', [userId]);
+    res.json(rows);
+  } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
 // Sharing & Search
 app.get('/api/shares/user', authenticateToken, async (req, res) => {
   try {

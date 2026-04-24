@@ -1,5 +1,6 @@
 import { apiService } from './apiService';
 import { toast } from 'sonner';
+import { activityService } from './activityService';
 
 export type ShareType = 'internal' | 'external_link';
 export type AccessLevel = 'view' | 'download' | 'edit';
@@ -22,18 +23,20 @@ export interface Share {
 
 export const shareService = {
   async createInternalShare(
-    resourceType: 'file' | 'folder',
+    resourceType: 'file' | 'folder' | 'document',
     resourceId: string,
     userId: string,
     accessLevel: AccessLevel
   ): Promise<Share | null> {
     try {
-      return await apiService.post('/shares/internal', {
+      const data = await apiService.post('/shares/internal', {
         resourceType,
         resourceId,
         userId,
         accessLevel
       });
+      await activityService.logActivity('SHARE', resourceType.toUpperCase(), resourceId, { userId, accessLevel, shareType: 'internal' });
+      return data;
     } catch (error) {
       console.error('Error creating internal share:', error);
       toast.error('Failed to create share');
@@ -42,7 +45,7 @@ export const shareService = {
   },
 
   async createExternalShare(
-    resourceType: 'file' | 'folder',
+    resourceType: 'file' | 'folder' | 'document',
     resourceId: string,
     accessLevel: AccessLevel,
     options?: {
@@ -51,12 +54,14 @@ export const shareService = {
     }
   ): Promise<Share | null> {
     try {
-      return await apiService.post('/shares/external', {
+      const data = await apiService.post('/shares/external', {
         resourceType,
         resourceId,
         accessLevel,
         ...options
       });
+      await activityService.logActivity('SHARE_LINK', resourceType.toUpperCase(), resourceId, { accessLevel, shareType: 'external' });
+      return data;
     } catch (error) {
       console.error('Error creating external share:', error);
       toast.error('Failed to create share link');
@@ -95,6 +100,7 @@ export const shareService = {
     try {
       await apiService.post(`/shares/${shareId}/revoke`, {});
       toast.success('Share revoked');
+      await activityService.logActivity('REVOKE_SHARE', 'SHARE', shareId);
       return true;
     } catch (error) {
       console.error('Error revoking share:', error);
@@ -105,11 +111,15 @@ export const shareService = {
 
   async accessShare(token: string, password?: string): Promise<Share | null> {
     try {
-      const endpoint = password ? `/shares/access/${token}?password=${password}` : `/shares/access/${token}`;
-      return await apiService.get(endpoint);
+      return await apiService.post(`/shares/access/${token}`, { password });
     } catch (error) {
       console.error('Error accessing share:', error);
       return null;
     }
+  },
+
+  getShareUrl(share: Share): string {
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/s/${share.link_token}`;
   }
 };

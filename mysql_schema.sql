@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS profiles (
     email VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
     avatar_url TEXT,
+    notification_email BOOLEAN DEFAULT TRUE,
+    notification_push BOOLEAN DEFAULT TRUE,
+    notification_weekly BOOLEAN DEFAULT TRUE,
+    two_factor_enabled BOOLEAN DEFAULT FALSE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (id) REFERENCES users(id) ON DELETE CASCADE

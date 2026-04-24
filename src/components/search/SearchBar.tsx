@@ -94,13 +94,13 @@ export function SearchBar() {
     <>
       <Button
         variant="outline"
-        className="relative h-8 w-full justify-start text-xs text-muted-foreground sm:pr-12 md:w-40 lg:w-64 bg-background"
+        className="relative h-7 w-full justify-start text-xs text-muted-foreground sm:pr-12 md:w-36 lg:w-56 bg-background"
         onClick={() => setOpen(true)}
       >
-        <Search className="mr-2 h-3.5 w-3.5" />
+        <Search className="mr-2 h-3 w-3" />
         <span>Search...</span>
-        <kbd className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 hidden h-5 select-none items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
-          <span className="text-[10px]">⌘</span>K
+        <kbd className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 hidden h-4.5 select-none items-center gap-0.5 rounded border border-border bg-muted px-1 font-mono text-[9px] font-medium opacity-100 sm:flex">
+          <span className="text-[9px]">⌘</span>K
         </kbd>
       </Button>
 

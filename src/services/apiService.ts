@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_URL = '/api';
 
 export const apiService = {
   async fetch(endpoint: string, options: RequestInit = {}) {
@@ -54,5 +54,16 @@ export const apiService = {
       throw new Error(data.error || 'Upload failed');
     }
     return data;
+  },
+
+  async put(endpoint: string, body: any) {
+    return this.fetch(endpoint, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  },
+
+  async delete(endpoint: string) {
+    return this.fetch(endpoint, { method: 'DELETE' });
   }
 };
