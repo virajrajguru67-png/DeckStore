@@ -690,6 +690,18 @@ app.get('/api/documents', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/documents/favorites', authenticateToken, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      'SELECT * FROM documents WHERE owner_id = ? AND is_favorite = TRUE AND deleted_at IS NULL ORDER BY created_at DESC',
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/documents/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
   try {
@@ -749,17 +761,6 @@ app.post('/api/documents/:id', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/documents/favorites', authenticateToken, async (req, res) => {
-  try {
-    const [rows] = await pool.query(
-      'SELECT * FROM documents WHERE owner_id = ? AND is_favorite = TRUE AND deleted_at IS NULL ORDER BY created_at DESC',
-      [req.user.id]
-    );
-    res.json(rows);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 app.post('/api/documents/:id/delete', authenticateToken, async (req, res) => {
   const { id } = req.params;

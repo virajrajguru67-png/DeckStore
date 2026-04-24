@@ -33,6 +33,7 @@ import {
     Eraser,
     Search,
     ChevronDown,
+    ChevronRight,
     Code,
     Highlighter,
     Palette,
@@ -48,6 +49,7 @@ import {
     Shapes,
     Box,
     BarChart,
+    Layers,
     Camera,
     GalleryVertical,
     Hash,
@@ -72,13 +74,13 @@ import { cn } from '@/lib/utils';
  * Optimized PageSheet component to prevent cursor jumping in contentEditable.
  * It only updates its internal innerHTML if the content prop changes EXTERNALLY.
  */
-const PageSheet = memo(({ 
-    content, 
-    onContentChange, 
-    onActive, 
-    onStylesUpdate, 
-    idx, 
-    editorRef 
+const PageSheet = memo(({
+    content,
+    onContentChange,
+    onActive,
+    onStylesUpdate,
+    idx,
+    editorRef
 }: any) => {
     const localRef = useRef<HTMLDivElement>(null);
     const lastContent = useRef(content);
@@ -143,9 +145,9 @@ const GlobalHeaderEditor = memo(({ content, onChange }: any) => {
     }, [content]);
 
     return (
-        <div 
+        <div
             ref={ref}
-            contentEditable 
+            contentEditable
             data-placeholder="Type something in the header..."
             className={cn(
                 "w-full text-center text-[10px] font-bold tracking-widest text-muted-foreground/60 p-2 mb-4 border-b border-dashed border-muted-foreground/30 hover:border-primary/40 hover:bg-muted/5 transition-all outline-none uppercase italic rounded-t-sm min-h-[30px]",
@@ -164,7 +166,7 @@ const GlobalFooterEditor = memo(({ content, onChange, pageNum, totalPages }: any
     const ref = useRef<HTMLDivElement>(null);
     const last = useRef(content);
     const isEmpty = !content || content === '<br>' || content === '';
-    
+
     // Resolve placeholders for display
     const resolvedContent = content ? content.replace('{P}', pageNum.toString()).replace('{N}', totalPages.toString()) : '';
 
@@ -175,9 +177,9 @@ const GlobalFooterEditor = memo(({ content, onChange, pageNum, totalPages }: any
     }, [resolvedContent]);
 
     return (
-        <div 
+        <div
             ref={ref}
-            contentEditable 
+            contentEditable
             data-placeholder="Type something in the footer..."
             className={cn(
                 "w-full text-center text-[10px] font-medium text-muted-foreground/50 p-2 mt-4 border-t border-dashed border-muted-foreground/30 hover:border-primary/40 hover:bg-muted/5 transition-all outline-none italic rounded-b-sm min-h-[30px]",
@@ -191,21 +193,24 @@ const GlobalFooterEditor = memo(({ content, onChange, pageNum, totalPages }: any
 });
 
 export default function DocumentEdit() {
+    const [isHighlightMode, setIsHighlightMode] = useState<boolean>(false);
+    const [activeHighlightColor, setActiveHighlightColor] = useState<string>('#ffff00');
+    const [activeFontColor, setActiveFontColor] = useState<string>('#000000');
+    const [globalHeader, setGlobalHeader] = useState<string>('');
+    const [globalFooter, setGlobalFooter] = useState<string>('');
+    const [showHeader, setShowHeader] = useState<boolean>(false);
+    const [showFooter, setShowFooter] = useState<boolean>(false);
+    const [docData, setDocData] = useState<Document | null>(null);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [title, setTitle] = useState<string>('');
+    const [pages, setPages] = useState<string[]>(['']);
+    const [activePageIndex, setActivePageIndex] = useState<number>(0);
+    const [summary, setSummary] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState<boolean>(false);
+    const [isSummarizing, setIsSummarizing] = useState<boolean>(false);
+    
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const [docData, setDocData] = useState<Document | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [title, setTitle] = useState('');
-    const [pages, setPages] = useState<string[]>(['']);
-    const [activePageIndex, setActivePageIndex] = useState(0);
-    const [summary, setSummary] = useState<string | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
-    const [isSummarizing, setIsSummarizing] = useState(false);
-    const [showHeader, setShowHeader] = useState(false);
-    const [showFooter, setShowFooter] = useState(false);
-    const [isHighlightMode, setIsHighlightMode] = useState(false);
-    const [activeHighlightColor, setActiveHighlightColor] = useState('#ffff00');
-    const [activeFontColor, setActiveFontColor] = useState('#000000');
     const editorRefs = useRef<(HTMLDivElement | null)[]>([]);
 
     const THEME_COLORS = [
@@ -236,6 +241,11 @@ export default function DocumentEdit() {
                             const raw = anyContent.html || anyContent.text || '';
                             initialPages = raw.split('<!-- page-break -->');
                         }
+                        
+                        if (anyContent.globalHeader) setGlobalHeader(anyContent.globalHeader);
+                        if (anyContent.globalFooter) setGlobalFooter(anyContent.globalFooter);
+                        if (anyContent.showHeader) setShowHeader(anyContent.showHeader);
+                        if (anyContent.showFooter) setShowFooter(anyContent.showFooter);
                     } else if (typeof doc.content === 'string') {
                         try {
                             const parsed = JSON.parse(doc.content);
@@ -244,6 +254,10 @@ export default function DocumentEdit() {
                             } else {
                                 initialPages = (parsed.html || parsed.text || '').split('<!-- page-break -->');
                             }
+                            if (parsed.globalHeader) setGlobalHeader(parsed.globalHeader);
+                            if (parsed.globalFooter) setGlobalFooter(parsed.globalFooter);
+                            if (parsed.showHeader) setShowHeader(parsed.showHeader);
+                            if (parsed.showFooter) setShowFooter(parsed.showFooter);
                         } catch {
                             initialPages = doc.content.split('<!-- page-break -->');
                         }
@@ -278,7 +292,11 @@ export default function DocumentEdit() {
                 content: {
                     pages: currentPages,
                     html: currentPages.join('<!-- page-break -->'),
-                    text: plainText
+                    text: plainText,
+                    globalHeader,
+                    globalFooter,
+                    showHeader,
+                    showFooter
                 },
             });
             setPages(currentPages);
@@ -456,7 +474,7 @@ export default function DocumentEdit() {
     const insertLink = () => {
         const selection = window.getSelection();
         const selectedText = selection ? selection.toString() : "";
-        
+
         const url = prompt("Enter the URL:", "https://");
         if (!url) return;
 
@@ -466,7 +484,7 @@ export default function DocumentEdit() {
         }
 
         const linkHtml = `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: underline; cursor: pointer;">${displayText}</a>`;
-        
+
         if (selectedText && selectedText.length > 0) {
             execCommand('createLink', url);
             // After createLink, the browser might not add target="_blank". 
@@ -706,13 +724,13 @@ export default function DocumentEdit() {
                                         <div className="w-[1px] h-4 bg-border/40 mx-0.5" />
 
                                         <div className="flex items-center gap-0">
-                                            <Button 
-                                                variant="ghost" 
-                                                size="sm" 
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
                                                 className="h-7 w-8 flex flex-col items-center justify-center transition-all px-0"
                                                 title={`Font Color (${activeFontColor})`}
-                                                onMouseDown={(e) => { 
-                                                    e.preventDefault(); 
+                                                onMouseDown={(e) => {
+                                                    e.preventDefault();
                                                     const editor = editorRefs.current[activePageIndex];
                                                     if (editor) {
                                                         editor.focus();
@@ -731,7 +749,7 @@ export default function DocumentEdit() {
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent className="p-3 w-64 bg-popover/95 backdrop-blur-md border-border/40 shadow-xl overflow-hidden">
                                                     {/* Automatic Section */}
-                                                    <div 
+                                                    <div
                                                         className="flex items-center gap-3 p-1.5 hover:bg-accent rounded-md cursor-pointer text-xs font-medium group transition-colors mb-2"
                                                         onMouseDown={(e) => { e.preventDefault(); setActiveFontColor('#000000'); execCommand('foreColor', '#000000'); }}
                                                     >
@@ -741,14 +759,14 @@ export default function DocumentEdit() {
 
                                                     {/* Theme Colors Label */}
                                                     <div className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider px-1">Theme Colors</div>
-                                                    
+
                                                     {/* Top Theme Row */}
                                                     <div className="grid grid-cols-10 gap-0.5 px-0.5 mb-0.5">
                                                         {THEME_COLORS.map(c => (
-                                                            <div 
-                                                                key={c.hex} 
-                                                                className="h-5 bg-transparent border-[0.5px] border-border/20 cursor-pointer hover:scale-110 transition-transform relative z-10" 
-                                                                style={{ backgroundColor: c.hex }} 
+                                                            <div
+                                                                key={c.hex}
+                                                                className="h-5 bg-transparent border-[0.5px] border-border/20 cursor-pointer hover:scale-110 transition-transform relative z-10"
+                                                                style={{ backgroundColor: c.hex }}
                                                                 title={c.name}
                                                                 onMouseDown={(e) => { e.preventDefault(); setActiveFontColor(c.hex); execCommand('foreColor', c.hex); }}
                                                             />
@@ -760,18 +778,18 @@ export default function DocumentEdit() {
                                                         {[0.8, 0.6, 0.4, 0.2, 0.1].map((shade, sIdx) => (
                                                             <div key={sIdx} className="grid grid-cols-10 gap-0.5">
                                                                 {THEME_COLORS.map(c => (
-                                                                    <div 
-                                                                        key={`${c.hex}-${shade}`} 
-                                                                        className="h-4 border-[0.5px] border-border/10 cursor-pointer hover:relative hover:z-20 hover:scale-125 transition-all" 
-                                                                        style={{ 
+                                                                    <div
+                                                                        key={`${c.hex}-${shade}`}
+                                                                        className="h-4 border-[0.5px] border-border/10 cursor-pointer hover:relative hover:z-20 hover:scale-125 transition-all"
+                                                                        style={{
                                                                             backgroundColor: c.hex,
                                                                             filter: sIdx < 2 ? `brightness(${1 + (3 - sIdx) * 0.2})` : `brightness(${0.8 - (sIdx - 2) * 0.2})`
                                                                         } as any}
-                                                                        onMouseDown={(e) => { 
-                                                                            e.preventDefault(); 
+                                                                        onMouseDown={(e) => {
+                                                                            e.preventDefault();
                                                                             const finalColor = c.hex; // Simplified
                                                                             setActiveFontColor(finalColor);
-                                                                            execCommand('foreColor', finalColor); 
+                                                                            execCommand('foreColor', finalColor);
                                                                         }}
                                                                     />
                                                                 ))}
@@ -783,17 +801,17 @@ export default function DocumentEdit() {
                                                     <div className="text-[10px] font-bold text-muted-foreground mb-1.5 uppercase tracking-wider px-1">Standard Colors</div>
                                                     <div className="grid grid-cols-10 gap-0.5 px-0.5 mb-4">
                                                         {STANDARD_COLORS.map(c => (
-                                                            <div 
-                                                                key={c} 
-                                                                className="h-5 border-[0.5px] border-border/20 cursor-pointer hover:scale-110 transition-transform shadow-sm" 
-                                                                style={{ backgroundColor: c }} 
+                                                            <div
+                                                                key={c}
+                                                                className="h-5 border-[0.5px] border-border/20 cursor-pointer hover:scale-110 transition-transform shadow-sm"
+                                                                style={{ backgroundColor: c }}
                                                                 onMouseDown={(e) => { e.preventDefault(); setActiveFontColor(c); execCommand('foreColor', c); }}
                                                             />
                                                         ))}
                                                     </div>
 
                                                     <div className="h-[1px] bg-border/40 my-2" />
-                                                    
+
                                                     {/* Utilities */}
                                                     <div className="flex flex-col gap-1">
                                                         <div className="flex items-center gap-2 p-1.5 hover:bg-accent rounded-md cursor-pointer text-xs group transition-colors">
@@ -815,16 +833,16 @@ export default function DocumentEdit() {
                                         </div>
 
                                         <div className="flex items-center">
-                                            <Button 
-                                                variant="ghost" 
-                                                size="sm" 
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
                                                 className={cn("h-7 w-8 flex flex-col items-center justify-center transition-all px-0 gap-0", isHighlightMode && "bg-primary/5 ring-1 ring-primary/20")}
-                                                title={`Highlighter (${activeHighlightColor})`} 
-                                                onMouseDown={(e) => { 
-                                                    e.preventDefault(); 
+                                                title={`Highlighter (${activeHighlightColor})`}
+                                                onMouseDown={(e) => {
+                                                    e.preventDefault();
                                                     const newMode = !isHighlightMode;
                                                     setIsHighlightMode(newMode);
-                                                    
+
                                                     const activeEditor = editorRefs.current[activePageIndex];
                                                     if (activeEditor) {
                                                         activeEditor.focus();
@@ -856,13 +874,13 @@ export default function DocumentEdit() {
                                                             { n: 'Red', c: '#ff0000' }, { n: 'Dark Blue', c: '#00008b' }, { n: 'Teal', c: '#008080' }, { n: 'Green', c: '#008000' }, { n: 'Violet', c: '#800080' },
                                                             { n: 'Dark Red', c: '#8b0000' }, { n: 'Dark Yellow', c: '#808000' }, { n: 'Gray', c: '#808080' }, { n: 'Silver', c: '#c0c0c0' }, { n: 'Black', c: '#000000' }
                                                         ].map(c => (
-                                                            <div 
-                                                                key={c.c} 
-                                                                className="h-7 w-7 rounded-sm border border-border/50 cursor-pointer hover:scale-110 transition-transform shadow-sm relative group" 
-                                                                style={{ backgroundColor: c.c }} 
+                                                            <div
+                                                                key={c.c}
+                                                                className="h-7 w-7 rounded-sm border border-border/50 cursor-pointer hover:scale-110 transition-transform shadow-sm relative group"
+                                                                style={{ backgroundColor: c.c }}
                                                                 title={c.n}
-                                                                onMouseDown={(e) => { 
-                                                                    e.preventDefault(); 
+                                                                onMouseDown={(e) => {
+                                                                    e.preventDefault();
                                                                     setActiveHighlightColor(c.c);
                                                                     setIsHighlightMode(true);
                                                                     const editor = editorRefs.current[activePageIndex];
@@ -872,16 +890,16 @@ export default function DocumentEdit() {
                                                                         document.execCommand('hiliteColor', false, c.c);
                                                                         document.execCommand('insertHTML', false, `<span style="background-color: ${c.c}">&#8203;</span>`);
                                                                     }
-                                                                }} 
+                                                                }}
                                                             >
                                                                 <div className="absolute inset-0 border border-white/20 opacity-0 group-hover:opacity-100 pointer-events-none" />
                                                             </div>
                                                         ))}
                                                     </div>
-                                                    
+
                                                     <div className="h-[1px] bg-border/40 my-2" />
-                                                    
-                                                    <div 
+
+                                                    <div
                                                         className="flex items-center gap-2 p-1.5 hover:bg-accent rounded-md cursor-pointer text-xs transition-colors group"
                                                         onMouseDown={(e) => {
                                                             e.preventDefault();
@@ -900,8 +918,8 @@ export default function DocumentEdit() {
                                                         </div>
                                                         <span className="group-hover:text-foreground/90 transition-colors">No Color</span>
                                                     </div>
-                                                    
-                                                    <div 
+
+                                                    <div
                                                         className="flex items-center gap-2 p-1.5 hover:bg-destructive/10 rounded-md cursor-pointer text-xs transition-colors group mt-1"
                                                         onMouseDown={(e) => {
                                                             e.preventDefault();
@@ -990,18 +1008,18 @@ export default function DocumentEdit() {
                             {/* Header & Footer Group */}
                             <div className="flex flex-col border-r border-border/40 pr-3 mr-3 pb-2">
                                 <div className="flex flex-col gap-0.5 mt-1">
-                                    <Button 
-                                        variant="ghost" 
-                                        size="sm" 
-                                        className={cn("h-7 px-2 justify-start gap-2 hover:bg-primary/5 text-[10px] font-normal", showHeader && "bg-primary/10 text-primary")} 
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className={cn("h-7 px-2 justify-start gap-2 hover:bg-primary/5 text-[10px] font-normal", showHeader && "bg-primary/10 text-primary")}
                                         onClick={(e) => { e.preventDefault(); setShowHeader(!showHeader); }}
                                     >
                                         <GalleryVertical className="h-3.5 w-3.5" /> Header
                                     </Button>
-                                    <Button 
-                                        variant="ghost" 
-                                        size="sm" 
-                                        className={cn("h-7 px-2 justify-start gap-2 hover:bg-primary/5 text-[10px] font-normal", showFooter && "bg-primary/10 text-primary")} 
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className={cn("h-7 px-2 justify-start gap-2 hover:bg-primary/5 text-[10px] font-normal", showFooter && "bg-primary/10 text-primary")}
                                         onClick={(e) => { e.preventDefault(); setShowFooter(!showFooter); }}
                                     >
                                         <GalleryVertical className="h-3.5 w-3.5 rotate-180" /> Footer
@@ -1065,9 +1083,9 @@ export default function DocumentEdit() {
                                         }}
                                     >
                                         {(showHeader || globalHeader !== '') && (
-                                            <GlobalHeaderEditor 
-                                                content={globalHeader} 
-                                                onChange={setGlobalHeader} 
+                                            <GlobalHeaderEditor
+                                                content={globalHeader}
+                                                onChange={setGlobalHeader}
                                             />
                                         )}
 
@@ -1087,8 +1105,8 @@ export default function DocumentEdit() {
                                         </div>
 
                                         {(showFooter || globalFooter !== '') && (
-                                            <GlobalFooterEditor 
-                                                content={globalFooter} 
+                                            <GlobalFooterEditor
+                                                content={globalFooter}
                                                 onChange={setGlobalFooter}
                                                 pageNum={idx + 1}
                                                 totalPages={pages.length}
