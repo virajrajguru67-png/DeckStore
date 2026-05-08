@@ -77,9 +77,9 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   );
 
   const uploadFiles = useCallback(
-    async (files: FileList | File[]) => {
+    async (files: FileList | globalThis.File[]) => {
       const fileArray = Array.from(files);
-      const results: (File | null)[] = [];
+      const results: (import('@/types/file').File | null)[] = [];
 
       for (const file of fileArray) {
         const result = await uploadFile(file);

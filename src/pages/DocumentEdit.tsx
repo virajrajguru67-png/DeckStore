@@ -57,8 +57,6 @@ import {
     MessageSquare,
     Video,
     Bookmark,
-    Layers,
-    ChevronRight
 } from 'lucide-react';
 import {
     DropdownMenu,
@@ -227,6 +225,8 @@ const IconButtonWithTooltip = ({ icon: Icon, title, onClick, onMouseDown, classN
 );
 
 export default function DocumentEdit() {
+    const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
     const [isHighlightMode, setIsHighlightMode] = useState<boolean>(false);
     const [activeHighlightColor, setActiveHighlightColor] = useState<string>('#ffff00');
     const [activeFontColor, setActiveFontColor] = useState<string>('#000000');
@@ -243,14 +243,7 @@ export default function DocumentEdit() {
     const [summary, setSummary] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isSummarizing, setIsSummarizing] = useState(false);
-    const [showHeader, setShowHeader] = useState(false);
-    const [showFooter, setShowFooter] = useState(false);
-    const [isHighlightMode, setIsHighlightMode] = useState(false);
-    const [globalHeader, setGlobalHeader] = useState('');
-    const [globalFooter, setGlobalFooter] = useState('');
     const [showPageNumbers, setShowPageNumbers] = useState(false);
-    const [activeHighlightColor, setActiveHighlightColor] = useState('#ffff00');
-    const [activeFontColor, setActiveFontColor] = useState('#000000');
     const editorRefs = useRef<(HTMLDivElement | null)[]>([]);
     const colorInputRef = useRef<HTMLInputElement>(null);
 
